@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>UA.Cryptography</RootNamespace>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Members whose meaning is the clause of the standard they are named after are not documented one by one. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>UA.Cryptography</PackageId>
+    <Description>Ukrainian cryptographic standards for .NET without dependencies: DSTU 4145-2002 elliptic-curve signature over GF(2^m) in polynomial and optimal normal bases, GOST 34.311-95 and DSTU 7564:2014 (Kupyna) hashes, DSTU 7624:2014 (Kalyna) block cipher with all its modes.</Description>
+    <PackageTags>dstu4145;dstu7564;dstu7624;kupyna;kalyna;gost34311;gost28147;ukraine;cryptography;ecdsa;signature</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="UA.Cryptography.Tests" />
+    <InternalsVisibleTo Include="UA.Cryptography.Benchmarks" />
+  </ItemGroup>
+
+</Project>

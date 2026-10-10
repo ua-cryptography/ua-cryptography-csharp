@@ -1,0 +1,42 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.nupkg
+*.snupkg
+
+# Local assistant instructions and skills
+CLAUDE.md
+.claude/
+
+# IDE
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Java build output of tools/
+*.class
+*.jar
+
+# Private key material and real signed documents must never be committed:
+# the tests use synthetic keys and public CA certificates only.
+*.jks
+*.pfx
+*.p12
+*.pck
+*.PCK
+*.SK
+*.ZS2
+Key-6.dat
+/test_data/
+
+# The text of DSTU 4145-2002 is copyrighted (Derzhstandart of Ukraine) and may not be redistributed;
+# keep a local copy only.
+/docs/dstu-4145-2002.md

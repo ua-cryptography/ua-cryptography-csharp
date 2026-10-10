@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+*.cer binary
+*.crt binary
+*.der binary
+*.p7s binary
+*.pdf binary
+*.zip binary
