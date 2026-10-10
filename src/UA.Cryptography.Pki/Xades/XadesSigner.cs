@@ -64,8 +64,10 @@ public sealed class XadesSigner(SigningKey signer, SignatureServices? services =
         XmlElement signedProperties = Child(qualifying, "xades", "SignedProperties", XadesNamespace);
         signedProperties.SetAttribute("Id", $"{id}-SignedProperties");
         XmlElement signatureProperties = Child(signedProperties, "xades", "SignedSignatureProperties", XadesNamespace);
+        // Whole seconds, as "Дія" and IIT write it.
+        DateTime now = DateTime.UtcNow;
         Child(signatureProperties, "xades", "SigningTime", XadesNamespace).InnerText =
-            XmlConvert.ToString(DateTime.UtcNow, XmlDateTimeSerializationMode.Utc);
+            XmlConvert.ToString(now.AddTicks(-(now.Ticks % TimeSpan.TicksPerSecond)), XmlDateTimeSerializationMode.Utc);
         XmlElement certDigest = Child(Child(Child(signatureProperties, "xades", "SigningCertificateV2", XadesNamespace), "xades", "Cert", XadesNamespace),
             "xades", "CertDigest", XadesNamespace);
         Method(certDigest, "DigestMethod", digestMethod);

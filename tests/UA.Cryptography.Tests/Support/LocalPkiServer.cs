@@ -31,12 +31,27 @@ internal sealed class LocalPkiServer : IDisposable
         int port = ((IPEndPoint)_listener.LocalEndpoint).Port;
         TsaUrl = $"http://127.0.0.1:{port}/tsp";
         OcspUrl = $"http://127.0.0.1:{port}/ocsp";
+        CaIssuersUrl = $"http://127.0.0.1:{port}/ca.p7b";
         _loop = Task.Run(Serve);
     }
 
     public string TsaUrl { get; }
 
     public string OcspUrl { get; }
+
+    /// <summary>
+    /// A certs-only CMS bundle (.p7b) with the provider's certificates — the issuing CA, the TSA and the OCSP responder —
+    /// as qualified providers publish at their certificates' caIssuers address.
+    /// </summary>
+    public string CaIssuersUrl { get; }
+
+    public int CaIssuersRequests { get; private set; }
+
+    /// <summary>
+    /// More certificates issued by the hierarchy's CAs that the OCSP responders answer for — added after the server
+    /// starts, since such a certificate names the server's addresses.
+    /// </summary>
+    public List<X509Certificate> ExtraCertificates { get; } = [];
 
     public int TimeStampRequests { get; private set; }
 
@@ -85,6 +100,7 @@ internal sealed class LocalPkiServer : IDisposable
             {
                 "/tsp" => (200, TimeStamp(body), "application/timestamp-reply"),
                 "/ocsp" => (200, Ocsp(body), "application/ocsp-response"),
+                "/ca.p7b" => (200, CaIssuers(), "application/pkcs7-mime"),
                 _ => (404, Encoding.ASCII.GetBytes("not found"), "text/plain"),
             };
             byte[] head = Encoding.ASCII.GetBytes(
@@ -107,11 +123,20 @@ internal sealed class LocalPkiServer : IDisposable
     {
         OcspRequests++;
         CertificateID id = new OcspReq(body).GetRequestList()[0].GetCertID();
-        X509Certificate[] all = [_pki.Signer.Certificate, .. _pki.ValidationCertificates];
+        X509Certificate[] all = [_pki.Signer.Certificate, .. _pki.ValidationCertificates, .. ExtraCertificates];
         X509Certificate subject = all.Single(c => c.SerialNumber.Equals(id.SerialNumber));
         X509Certificate issuer = all.Single(c => c.SubjectDN.Equivalent(subject.IssuerDN));
         OcspResponder responder = PkiLayer.Responder(_pki, issuer.ToPki()) ?? throw new InvalidOperationException("No responder");
         return OcspResponder.Encode(responder.Respond(subject, issuer));
+    }
+
+    private byte[] CaIssuers()
+    {
+        CaIssuersRequests++;
+        X509Certificate[] bundle = [_pki.IssuingCa.Certificate, _pki.Tsa.Identity.Certificate, _pki.IssuingCaOcsp.Identity.Certificate];
+        var certsOnly = new SignedData(new DerSet(), new ContentInfo(CmsObjectIdentifiers.Data, null),
+            new DerSet(bundle.Select(c => (Asn1Encodable)c.CertificateStructure).ToArray()), null, new DerSet());
+        return new ContentInfo(CmsObjectIdentifiers.SignedData, certsOnly).GetDerEncoded();
     }
 
     public void Dispose()

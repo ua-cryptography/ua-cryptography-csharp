@@ -102,7 +102,7 @@ Requires the .NET 10 SDK (the libraries target .NET 8; the tests, the benchmark 
 
 ```bash
 dotnet build
-dotnet test                                                        # 832 tests, a few seconds
+dotnet test                                                        # 837 tests, a few seconds
 dotnet run -c Release --project bench/UA.Cryptography.Benchmarks             # benchmark
 dotnet run -c Release --project bench/UA.Cryptography.Benchmarks -- --portable # without PMULL/PCLMUL
 ```
@@ -202,6 +202,8 @@ docs/                             signature formats, implementation notes, porti
 - [docs/signature-formats.md](docs/signature-formats.md) — XAdES, CAdES, PAdES, ASiC, timestamps and OCSP in the
   Ukrainian PKI, and how to verify them.
 - [docs/ua-sign.md](docs/ua-sign.md) — the command-line tool, its scripts, and the PKI library underneath.
+- [docs/provider-formats.md](docs/provider-formats.md) — the formats PrivatBank (CAdES-T `.sig`) and "Дія" (ASiC-E,
+  XAdES-B-LT) hand out, and how `ua-sign` makes and verifies each of them.
 - [docs/implementation-notes.md](docs/implementation-notes.md) — errors in the text of the standard, PKI conventions,
   what verifies each layer, differences from the 2010 project.
 - [docs/porting.md](docs/porting.md) — porting to other languages.

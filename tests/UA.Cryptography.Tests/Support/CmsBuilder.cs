@@ -15,11 +15,16 @@ namespace UA.Cryptography.Tests.Support;
 /// </summary>
 internal static class CmsBuilder
 {
+    /// <param name="issuerSerial">Add issuerSerial to the ESSCertIDv2, as IIT and the banks do.</param>
     public static SignerInfo CreateSignerInfo(byte[] content, DerObjectIdentifier contentType, TestPki.TestIdentity signer,
-        string hashOid, IEnumerable<AttributeCms>? extraSignedAttributes = null)
+        string hashOid, IEnumerable<AttributeCms>? extraSignedAttributes = null, bool issuerSerial = false)
     {
         var digestAlgorithm = new AlgorithmIdentifier(new DerObjectIdentifier(hashOid));
-        var essCertId = new EssCertIDv2(digestAlgorithm, UaPki.Hash(hashOid, signer.Certificate.GetEncoded()));
+        byte[] certificateHash = UaPki.Hash(hashOid, signer.Certificate.GetEncoded());
+        var essCertId = issuerSerial
+            ? new EssCertIDv2(digestAlgorithm, certificateHash, new IssuerSerial(
+                new GeneralNames(new GeneralName(signer.Certificate.IssuerDN)), new DerInteger(signer.Certificate.SerialNumber)))
+            : new EssCertIDv2(digestAlgorithm, certificateHash);
         AttributeCms[] signedAttributes =
         [
             new(PkcsObjectIdentifiers.Pkcs9AtContentType, new DerSet(contentType)),

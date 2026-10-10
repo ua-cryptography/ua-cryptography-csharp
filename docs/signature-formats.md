@@ -5,7 +5,8 @@ library. The conventions described here were established on real qualified signa
 PKI; in the repository they are reproduced by a **synthetic PKI** (section 13), so the tests need no personal data.
 
 **The goal is to be able to verify signatures of any format.** The end of the document lists what is already covered
-by tests and what remains to be done.
+by tests and what remains to be done. The formats two providers hand out — PrivatBank's CAdES-T and the "Дія" ASiC-E —
+are described field by field in [provider-formats.md](provider-formats.md).
 
 Code references: `src/UA.Cryptography` (cryptography), `src/UA.Cryptography.Pki` (the formats themselves: DER, X.509,
 JKS, CMS/CAdES, timestamps, OCSP, XML canonicalization, XAdES, ASiC — no third-party dependencies),

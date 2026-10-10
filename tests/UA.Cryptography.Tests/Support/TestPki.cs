@@ -39,15 +39,20 @@ internal static class TestPki
     {
         key ??= GenerateKey();
         var subject = new X509Name(subjectDn);
-        return new TestIdentity(key, BuildCertificate(subject, key, subject, key, isCa, null, signatureAlgorithm));
+        return new TestIdentity(key, BuildCertificate(subject, key, subject, key, isCa, null, signatureAlgorithm, null, null));
     }
 
-    /// <summary>A certificate for <paramref name="subjectKey"/> issued and signed by <paramref name="issuer"/>.</summary>
+    /// <summary>
+    /// A certificate for <paramref name="subjectKey"/> issued and signed by <paramref name="issuer"/>; with
+    /// <paramref name="ocspUrl"/> or <paramref name="caIssuersUrl"/> it names its services in authorityInfoAccess, as the
+    /// certificates qualified providers issue to their customers do.
+    /// </summary>
     public static TestIdentity Issue(string subjectDn, TestKey subjectKey, TestIdentity issuer, bool isCa = false,
-        KeyPurposeID? extendedKeyUsage = null, string signatureAlgorithm = Oids.Dstu4145WithGost34311)
+        KeyPurposeID? extendedKeyUsage = null, string signatureAlgorithm = Oids.Dstu4145WithGost34311,
+        string? ocspUrl = null, string? caIssuersUrl = null)
     {
         X509Certificate certificate = BuildCertificate(new X509Name(subjectDn), subjectKey, issuer.Certificate.SubjectDN, issuer.Key,
-            isCa, extendedKeyUsage, signatureAlgorithm);
+            isCa, extendedKeyUsage, signatureAlgorithm, ocspUrl, caIssuersUrl);
         return new TestIdentity(subjectKey, certificate);
     }
 
@@ -75,7 +80,7 @@ internal static class TestPki
     }
 
     private static X509Certificate BuildCertificate(X509Name subject, TestKey subjectKey, X509Name issuer, TestKey issuerKey,
-        bool isCa, KeyPurposeID? extendedKeyUsage, string signatureAlgorithm)
+        bool isCa, KeyPurposeID? extendedKeyUsage, string signatureAlgorithm, string? ocspUrl, string? caIssuersUrl)
     {
         var algorithm = new AlgorithmIdentifier(new DerObjectIdentifier(signatureAlgorithm));
         var gen = new V3TbsCertificateGenerator();
@@ -91,6 +96,13 @@ internal static class TestPki
         extensions.AddExtension(X509Extensions.BasicConstraints, critical: true, new BasicConstraints(isCa));
         if (extendedKeyUsage is not null)
             extensions.AddExtension(X509Extensions.ExtendedKeyUsage, critical: true, new ExtendedKeyUsage(extendedKeyUsage));
+        var access = new List<AccessDescription>();
+        if (ocspUrl is not null)
+            access.Add(new AccessDescription(AccessDescription.IdADOcsp, new GeneralName(GeneralName.UniformResourceIdentifier, ocspUrl)));
+        if (caIssuersUrl is not null)
+            access.Add(new AccessDescription(AccessDescription.IdADCAIssuers, new GeneralName(GeneralName.UniformResourceIdentifier, caIssuersUrl)));
+        if (access.Count > 0)
+            extensions.AddExtension(X509Extensions.AuthorityInfoAccess, critical: false, new DerSequence(access.ToArray()));
         gen.SetExtensions(extensions.Generate());
 
         TbsCertificateStructure tbs = gen.GenerateTbsCertificate();

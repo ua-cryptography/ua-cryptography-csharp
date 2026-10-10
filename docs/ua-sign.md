@@ -129,6 +129,9 @@ certification centre instead (`…/certificates/nbu-roots`). A signature PrivatB
 ua-sign verify --in document.txt.sig --trust nbu-root-2036-dstu7564.cer --online
 ```
 
+The PrivatBank and "Дія" formats — what each provider puts where, and how to make each with `ua-sign` — are described
+in [provider-formats.md](provider-formats.md).
+
 ### The INI report
 
 `--format ini` prints, instead of the checks, a report with everything the checks were made on; `--report FILE` writes
@@ -154,12 +157,12 @@ level=XAdES-B-LT
 packaging=detached
 signature_algorithm=DSTU 4145 with DSTU 7564-256 (http://www.w3.org/2001/04/xmldsig-more#dstu4145-dstu7564-256)
 digest_algorithm=DSTU 7564-256 (1.2.804.2.1.1.1.1.2.2.1)
-signing_time=2026-10-10T16:17:34Z
-timestamp_time=2026-10-10T16:17:59Z
+signing_time=2026-01-01T12:00:00Z
+timestamp_time=2026-01-01T12:00:25Z
 
 [signature.1.timestamp.1]
 kind=signature time-stamp
-time=2026-10-10T16:17:59Z
+time=2026-01-01T12:00:25Z
 policy=1.2.804.2.1.1.1.2.3.4.1.1
 imprint_algorithm=DSTU 7564-256 (1.2.804.2.1.1.1.1.2.2.1)
 ```
