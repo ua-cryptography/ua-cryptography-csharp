@@ -20,6 +20,15 @@ public class ChainToTrustAnchorTests
     }
 
     [Fact]
+    public void PrivatBankIssuingCaChainsToTheNbuRootAndNotToCzo()
+    {
+        X509Certificate intermediate = UaPki.ParseCertificate(File.ReadAllBytes(Path.Combine(TestFiles.Intermediates, "privatbank-knedp.cer")));
+        X509Certificate[] nbu = Directory.GetFiles(TestFiles.NbuRoots, "*.cer").Select(p => UaPki.ParseCertificate(File.ReadAllBytes(p))).ToArray();
+        Assert.True(UaPki.ChainsToTrusted(intermediate, nbu, nbu));
+        Assert.False(UaPki.ChainsToTrusted(intermediate, TrustedRoots(), TrustedRoots()));
+    }
+
+    [Fact]
     public void SyntheticChainIsRejectedByCzoTrust()
     {
         // A synthetic root and leaf verify among themselves but do not terminate at a trusted CZO root.

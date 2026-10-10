@@ -259,11 +259,17 @@ public sealed class UaSignTests : IDisposable
         string document = Document();
         Assert.Equal(UaSign.Valid, Run("sign", "--keystore", P("signer.jks"), "--password", Password, "--format", "cades", "--in", document).Code);
 
+        // Level B carries only the signer's certificate: without the CA the output says how to get it.
+        var (code, output) = Run("verify", "--in", document + ".p7s");
+        Assert.Equal(UaSign.Valid, code);
+        Assert.Contains("Hint: certificates are missing", output, StringComparison.Ordinal);
+
         // The synthetic certificates name no responder, so --online has nobody to ask: the warning stays.
         File.WriteAllBytes(P("ca.cer"), pki.IssuingCa.Certificate.GetEncoded());
-        var (code, output) = Run("verify", "--in", document + ".p7s", "--online", "--certs", P("ca.cer"));
+        (code, output) = Run("verify", "--in", document + ".p7s", "--online", "--certs", P("ca.cer"));
         Assert.Equal(UaSign.Valid, code);
         Assert.Contains("[WARN] signer: revocation of 'Test Signer'", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("Hint:", output, StringComparison.Ordinal);
     }
 
     [Fact]

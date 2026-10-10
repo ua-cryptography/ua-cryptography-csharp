@@ -67,10 +67,10 @@ public static class CadesVerifier
         // Time-stamps: contentTimeStamp over the data, signatureTimeStampToken over the signature value.
         List<Certificate> tsaPool = [.. known];
         if (signer.FindSigned(Oids.ContentTimeStamp) is { } contentStamp)
-            VerifyTimeStamp(contentStamp.Value, content, tsaPool, options, report, "content time-stamp");
+            VerifyTimeStamp(contentStamp.Value, content, certificate, tsaPool, options, report, "content time-stamp");
         if (signer.FindUnsigned(Oids.SignatureTimeStampToken) is { } signatureStamp)
         {
-            TimeStampToken? token = VerifyTimeStamp(signatureStamp.Value, signer.Signature, tsaPool, options, report, "signature time-stamp");
+            TimeStampToken? token = VerifyTimeStamp(signatureStamp.Value, signer.Signature, certificate, tsaPool, options, report, "signature time-stamp");
             if (token is not null && report.Checks.Where(c => c.Name.StartsWith("signature time-stamp", StringComparison.Ordinal)).All(c => c.Status != CheckStatus.Failed))
                 report.TimeStampTime = token.GenTime;
         }
@@ -82,8 +82,12 @@ public static class CadesVerifier
         return report;
     }
 
-    private static TimeStampToken? VerifyTimeStamp(Asn1Node value, byte[] covered, List<Certificate> pool, ValidationOptions options,
-        VerificationReport report, string name)
+    /// <summary>
+    /// Verifies a time-stamp; returns the token only when the service's certificate was found and checked. A token without
+    /// that certificate is completed, when downloads are allowed, from the caIssuers addresses of <paramref name="signerCertificate"/>.
+    /// </summary>
+    private static TimeStampToken? VerifyTimeStamp(Asn1Node value, byte[] covered, Certificate signerCertificate, List<Certificate> pool,
+        ValidationOptions options, VerificationReport report, string name)
     {
         TimeStampToken token;
         try
@@ -95,13 +99,14 @@ public static class CadesVerifier
             report.Fail(name, e.Message);
             return null;
         }
+        if (options.Downloads is not null && token.FindSignerCertificate(pool) is null)
+            pool.AddRange(CertificatePathValidator.DownloadIssuers(signerCertificate, options.Downloads));
         Certificate? tsa = token.Verify(covered, pool, report, name);
         report.Add(new TimeStampDetails(name, token, tsa));
-        if (tsa is not null)
-        {
-            pool.AddRange(token.Cms.Certificates);
-            CertificatePathValidator.Validate(tsa, pool, [], options, token.GenTime, report, $"{name} service");
-        }
+        if (tsa is null)
+            return null;
+        pool.AddRange(token.Cms.Certificates);
+        CertificatePathValidator.Validate(tsa, pool, [], options, token.GenTime, report, $"{name} service");
         return token;
     }
 

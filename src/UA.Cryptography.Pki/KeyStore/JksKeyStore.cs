@@ -22,17 +22,24 @@ public sealed class JksPrivateKeyEntry(string alias, DateTimeOffset created, byt
 
     public IReadOnlyList<Certificate> Chain { get; } = chain;
 
+    /// <summary>
+    /// The certificate of <paramref name="key"/> in <see cref="Chain"/>. keytool stores it first; some banks store the
+    /// chain root first and add the certificate of the key-agreement key after the signing one.
+    /// </summary>
+    public Certificate? FindCertificate(Dstu4145PublicKey key) =>
+        Chain.FirstOrDefault(c => c.HasDstu4145Key && c.PublicKey.Domain.Field.M == key.Domain.Field.M && c.PublicKey.Q.Equals(key.Q));
+
     /// <summary>The PKCS#8 PrivateKeyInfo. The caller should wipe it after use.</summary>
     public byte[] DecryptPkcs8(string password) => JksKeyStore.UnprotectKey(ProtectedKey, password);
 
-    /// <summary>The DSTU 4145 private key; when a certificate is present, its public key must match.</summary>
+    /// <summary>The DSTU 4145 private key; when the chain holds DSTU 4145 certificates, one of them must be the key's.</summary>
     public Dstu4145PrivateKey GetPrivateKey(string password)
     {
         byte[] pkcs8 = DecryptPkcs8(password);
         try
         {
             Dstu4145PrivateKey key = Dstu4145PrivateKey.FromPkcs8(pkcs8);
-            if (Chain.Count > 0 && Chain[0].HasDstu4145Key && !Chain[0].PublicKey.Q.Equals(key.PublicKey.Q))
+            if (Chain.Any(c => c.HasDstu4145Key) && FindCertificate(key.PublicKey) is null)
                 throw new InvalidDataException($"The private key of '{Alias}' does not match its certificate.");
             return key;
         }

@@ -46,6 +46,33 @@ public class JksKeyStoreTests
     }
 
     [Fact]
+    public void ChainStoredRootFirstWithAKeyAgreementCertificateIsReordered()
+    {
+        // As PrivatBank issues keys: root, CA, the signing certificate, then the certificate of the key-agreement key.
+        Hierarchy pki = Hierarchy.Shared;
+        Certificate signer = pki.Signer.Certificate.ToPki();
+        Certificate ca = pki.IssuingCa.Certificate.ToPki();
+        Certificate root = PkiLayer.Root(pki);
+        var agreementKey = Dstu4145PrivateKey.Generate(Dstu4145NamedCurves.Polynomial(431));
+        Certificate agreement = new CertificateBuilder(signer.Subject, agreementKey.PublicKey)
+            .AddKeyUsage(KeyUsageFlags.KeyAgreement).Issue(ca, pki.IssuingCa.Key.ToPki());
+        var store = new JksKeyStore();
+        store.AddPrivateKey("pb_sign", pki.Signer.Key.ToPki(), [root, ca, signer, agreement], Password);
+        JksKeyStore read = JksKeyStore.Load(store.Save(Password), Password);
+
+        JksPrivateKeyEntry entry = read.PrivateKeys.Single();
+        Assert.Equal(signer, entry.FindCertificate(entry.GetPrivateKey(Password).PublicKey));
+        SigningKey key = SigningKey.FromJks(read, Password);
+        Assert.Equal(signer, key.Certificate);
+        Assert.Equal([signer, ca, root], key.Chain);
+
+        // A key that matches none of the certificates is still refused.
+        var other = new JksKeyStore();
+        other.AddPrivateKey("other", agreementKey, [root, ca, signer], Password);
+        Assert.Throws<InvalidDataException>(() => SigningKey.FromJks(JksKeyStore.Load(other.Save(Password), Password), Password));
+    }
+
+    [Fact]
     public void SeveralEntriesAndUnusualAliasesRoundTrip()
     {
         Hierarchy pki = Hierarchy.Shared;

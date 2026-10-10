@@ -168,13 +168,14 @@ public static class XadesVerifier
             byte[] covered = XmlCanonicalizer.Canonicalize(signatureValue, method);
             TimeStampToken token = TimeStampToken.Load(Convert.FromBase64String(Single(stamp, "xades:EncapsulatedTimeStamp", ns).InnerText.Trim()));
             int before = report.Checks.Count;
+            if (options.Downloads is not null && token.FindSignerCertificate(pool) is null)
+                pool.AddRange(CertificatePathValidator.DownloadIssuers(certificate, options.Downloads));
             Certificate? tsa = token.Verify(covered, pool, report, "signature time-stamp");
             report.Add(new TimeStampDetails("signature time-stamp", token, tsa));
-            if (tsa is not null)
-            {
-                pool.AddRange(token.Cms.Certificates);
-                CertificatePathValidator.Validate(tsa, pool, [], options, token.GenTime, report, "signature time-stamp service");
-            }
+            if (tsa is null)
+                continue;
+            pool.AddRange(token.Cms.Certificates);
+            CertificatePathValidator.Validate(tsa, pool, [], options, token.GenTime, report, "signature time-stamp service");
             if (report.Checks.Skip(before).All(c => c.Status != CheckStatus.Failed))
                 report.TimeStampTime ??= token.GenTime;
         }

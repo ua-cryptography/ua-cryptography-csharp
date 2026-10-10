@@ -3,7 +3,9 @@ using Org.BouncyCastle.Asn1.Esf;
 using Org.BouncyCastle.Asn1.Ess;
 using Org.BouncyCastle.Cms;
 using UA.Cryptography.Pki;
+using UA.Cryptography.Pki.Asn1;
 using UA.Cryptography.Pki.Cades;
+using UA.Cryptography.Pki.Services;
 using UA.Cryptography.Pki.Validation;
 using UA.Cryptography.Pki.X509;
 using BcTimeStampToken = Org.BouncyCastle.Tsp.TimeStampToken;
@@ -183,6 +185,83 @@ public class CadesSignerTests
         VerificationResult forged = CadesVerifier.Verify(swapped, null, Trusting(pki));
         Assert.False(forged.IsValid);
         Assert.Contains(forged.Signatures[0].Checks, c => c.Name == "CMS: signing certificate" && c.Status == CheckStatus.Failed);
+    }
+
+    [Fact]
+    public void SigningCertificateV2NamesTheIssuerAndSerialNumber()
+    {
+        // As IIT and the banks write it: ESSCertIDv2 { hashAlgorithm, certHash, issuerSerial }.
+        Hierarchy pki = Hierarchy.Shared;
+        byte[] signature = Sign(new CadesOptions());
+        var attribute = new CmsSignedData(signature).GetSignerInfos().GetSigners().Cast<SignerInformation>().Single()
+            .SignedAttributes[PkcsObjectIdentifiers.IdAASigningCertificateV2];
+        EssCertIDv2 id = SigningCertificateV2.GetInstance(attribute.AttrValues[0]).GetCerts().Single();
+        Assert.Equal(pki.Signer.Certificate.SerialNumber, id.IssuerSerial.Serial.Value);
+        Assert.Equal(pki.IssuingCa.Certificate.SubjectDN.GetEncoded(), id.IssuerSerial.Issuer.GetNames().Single().Name.ToAsn1Object().GetEncoded());
+
+        VerificationResult result = CadesVerifier.Verify(signature, null, Trusting(pki));
+        Assert.True(result.IsValid, Describe(result));
+        Assert.Contains(result.Signatures[0].Checks, c => c.Name == "CMS: signing certificate"
+            && c.Details.EndsWith("and so do its issuer and serial number", StringComparison.Ordinal));
+
+        // The right hash with another serial number in issuerSerial does not pass.
+        SigningKey signer = PkiLayer.Signer(pki);
+        Certificate certificate = signer.Certificate;
+        byte[] wrongSerial = Der.Sequence(Der.Sequence(Der.Explicit(4, certificate.Issuer.Encoded)), Der.Integer(certificate.SerialNumber + 1));
+        byte[] attributes = Der.SetOf(
+            PkiCmsBuilder.Attribute(UA.Cryptography.Pki.Oids.ContentType, Der.ObjectIdentifier(UA.Cryptography.Pki.Oids.Data)),
+            PkiCmsBuilder.Attribute(UA.Cryptography.Pki.Oids.MessageDigest, Der.OctetString(PkiAlgorithms.Hash(Oids.Dstu7564_256, Data, signer.Key.Dke))),
+            PkiCmsBuilder.Attribute(UA.Cryptography.Pki.Oids.SigningCertificateV2, Der.Sequence(Der.Sequence(Der.Sequence(
+                Der.AlgorithmIdentifier(Oids.Dstu7564_256), Der.OctetString(PkiAlgorithms.Hash(Oids.Dstu7564_256, certificate.Encoded)), wrongSerial)))));
+        byte[] signerInfo = PkiCmsBuilder.SignerInfo(attributes, signer, Oids.Dstu7564_256).SignerInfo;
+        byte[] forged = PkiCmsBuilder.SignedData(signerInfo, Oids.Dstu7564_256, UA.Cryptography.Pki.Oids.Data, Data, [certificate]);
+        result = CadesVerifier.Verify(forged, null, Trusting(pki));
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Signatures[0].Checks, c => c.Name == "CMS: signing certificate" && c.Status == CheckStatus.Failed);
+    }
+
+    [Fact]
+    public void TimeStampWithoutTheServiceCertificateIsCompletedFromCaIssuers()
+    {
+        // The shape PrivatBank hands out: CAdES-T with only the signer's certificate, the token without the TSA's, and the
+        // provider's whole set (CA and TSA certificates) published at the signer certificate's caIssuers address.
+        Hierarchy pki = Hierarchy.Shared;
+        Certificate ca = pki.IssuingCa.Certificate.ToPki();
+        Certificate root = PkiLayer.Root(pki);
+        Certificate tsa = pki.Tsa.Identity.Certificate.ToPki();
+        Dstu4145PrivateKey key = pki.Signer.Key.ToPki();
+        Certificate certificate = new CertificateBuilder(pki.Signer.Certificate.ToPki().Subject, key.PublicKey)
+            .AddKeyUsage(KeyUsageFlags.DigitalSignature | KeyUsageFlags.NonRepudiation)
+            .AddAuthorityInfoAccess(null, "http://ca.test/bundle.p7b")
+            .Issue(ca, pki.IssuingCa.Key.ToPki());
+        var services = new SignatureServices { TimeStamps = new PkiLayer.TimeStamps(pki, includeCertificate: false) };
+        byte[] signature = new CadesSigner(new SigningKey(key, [certificate]), services).Sign(Data, new CadesOptions(Level: SignatureLevel.T));
+
+        // Offline the token cannot be checked: a warning, and its time is not used.
+        VerificationReport offline = CadesVerifier.Verify(signature, null, new ValidationOptions()).Signatures[0];
+        Assert.True(offline.IsValid, string.Join("\n", offline.Checks));
+        Assert.Contains(offline.Checks, c => c.Name == "signature time-stamp: service certificate" && c.Status == CheckStatus.Warning);
+        Assert.Null(offline.TimeStampTime);
+
+        // With downloads the bundle completes both the time-stamp and the signer's path, in one download.
+        var downloads = new Downloads(ca, tsa);
+        VerificationReport online = CadesVerifier.Verify(signature, null, new ValidationOptions { TrustAnchors = [root], Downloads = downloads }).Signatures[0];
+        Assert.True(online.IsValid, string.Join("\n", online.Checks));
+        Assert.Contains(online.Checks, c => c.Name == "signature time-stamp: signature" && c.Status == CheckStatus.Passed);
+        Assert.Contains(online.Checks, c => c.Name == "signer: trust" && c.Status == CheckStatus.Passed);
+        Assert.Equal(online.TimeStamps.Single().Token.GenTime, online.TimeStampTime);
+        Assert.Equal(["http://ca.test/bundle.p7b"], downloads.Urls);
+    }
+
+    private sealed class Downloads(params Certificate[] certificates) : ICertificateSource
+    {
+        public List<string> Urls { get; } = [];
+
+        public IReadOnlyList<Certificate> Download(string url)
+        {
+            Urls.Add(url);
+            return certificates;
+        }
     }
 
     [Fact]

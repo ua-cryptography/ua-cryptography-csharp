@@ -70,12 +70,30 @@ public static class CmsVerifier
 
         // SigningCertificateV2 ::= SEQUENCE { certs SEQUENCE OF ESSCertIDv2, ... }
         // ESSCertIDv2 ::= SEQUENCE { hashAlgorithm DEFAULT sha256, certHash OCTET STRING, issuerSerial OPTIONAL }
+        // ESSCertID   ::= SEQUENCE { certHash OCTET STRING, issuerSerial OPTIONAL }
         Asn1Node first = (v2 ?? v1)!.Value[0][0];
         string hashOid = v2 is null ? Oids.Sha1 : first[0].Is(Asn1Tag.Sequence) ? first[0][0].GetOid() : Oids.Sha256;
-        byte[] hash = (first[0].Is(Asn1Tag.Sequence) ? first[1] : first[0]).GetOctetString();
+        int hashIndex = first[0].Is(Asn1Tag.Sequence) ? 1 : 0;
+        byte[] hash = first[hashIndex].GetOctetString();
         byte[]? dke = certificate.HasDstu4145Key ? certificate.PublicKey.Dke : null;
         bool matches = PkiAlgorithms.IsSupportedHash(hashOid) && PkiAlgorithms.DigestMatches(hashOid, certificate.Encoded, hash, dke);
-        report.Check($"{prefix}: signing certificate", matches,
-            matches ? $"{PkiAlgorithms.HashName(hashOid)} of the certificate matches" : "the signed attributes name a different certificate");
+        if (!matches)
+        {
+            report.Fail($"{prefix}: signing certificate", "the signed attributes name a different certificate");
+            return;
+        }
+        if (first.Count > hashIndex + 1 && !IssuerSerialMatches(first[hashIndex + 1], certificate))
+        {
+            report.Fail($"{prefix}: signing certificate", "the hash matches, but issuerSerial names another issuer or serial number");
+            return;
+        }
+        report.Pass($"{prefix}: signing certificate", $"{PkiAlgorithms.HashName(hashOid)} of the certificate matches"
+            + (first.Count > hashIndex + 1 ? ", and so do its issuer and serial number" : ""));
     }
+
+    // IssuerSerial ::= SEQUENCE { issuer GeneralNames, serialNumber, issuerUID OPTIONAL }; the issuer is directoryName [4].
+    private static bool IssuerSerialMatches(Asn1Node issuerSerial, Certificate certificate) =>
+        issuerSerial.Is(Asn1Tag.Sequence) && issuerSerial.Count >= 2
+        && issuerSerial[1].GetInteger() == certificate.SerialNumber
+        && issuerSerial[0].Children.Any(n => n.IsContext(4) && DistinguishedName.FromAsn1(n[0]).Equals(certificate.Issuer));
 }

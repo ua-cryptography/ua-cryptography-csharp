@@ -49,7 +49,7 @@ public class TimeStampTokenTests
 
         var report = new VerificationReport("token");
         Assert.Null(token.Verify(Covered, [], report, "ts"));
-        Assert.Contains(report.Checks, c => c.Name == "ts: service certificate" && c.Status == CheckStatus.Failed);
+        Assert.Contains(report.Checks, c => c.Name == "ts: service certificate" && c.Status == CheckStatus.Warning);
     }
 
     [Fact]

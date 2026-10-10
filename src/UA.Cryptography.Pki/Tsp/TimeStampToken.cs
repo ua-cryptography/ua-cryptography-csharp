@@ -64,7 +64,8 @@ public sealed class TimeStampToken
 
     /// <summary>
     /// Verifies the token over <paramref name="covered"/>: the imprint, the CMS signer and the extended key usage of the
-    /// service certificate. Returns the service certificate, or null when it was not found.
+    /// service certificate. Returns the service certificate, or null when it was not found: the token's signature then
+    /// stays unverified, which is a warning — the token must not be relied on, but the signature it stamps is not wrong.
     /// </summary>
     public Certificate? Verify(ReadOnlySpan<byte> covered, IEnumerable<Certificate> known, VerificationReport report, string name)
     {
@@ -75,7 +76,8 @@ public sealed class TimeStampToken
         Certificate? tsa = FindSignerCertificate(known);
         if (tsa is null)
         {
-            report.Fail($"{name}: service certificate", $"the certificate of the time-stamping service ({Signer}) is not available");
+            report.Warn($"{name}: service certificate",
+                $"the certificate of the time-stamping service ({Signer}) is not available, so the time-stamp is not verified");
             return null;
         }
         CmsVerifier.VerifySigner(Signer, tsa, Oids.TstInfo, Cms.Content!, report, name);

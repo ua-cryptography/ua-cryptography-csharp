@@ -1,4 +1,5 @@
 using UA.Cryptography.Pki.KeyStore;
+using UA.Cryptography.Pki.Validation;
 using UA.Cryptography.Pki.X509;
 
 namespace UA.Cryptography.Pki;
@@ -24,7 +25,9 @@ public sealed class SigningKey
 
     /// <summary>
     /// Opens a key from a JKS store. Without <paramref name="alias"/> the store must hold exactly one private key, or
-    /// exactly one whose certificate allows signing (keyUsage digitalSignature or nonRepudiation).
+    /// exactly one with an end-entity certificate that allows signing (keyUsage digitalSignature or nonRepudiation).
+    /// The chain is rebuilt from the key's certificate up through its issuers, whatever order the store keeps it in;
+    /// certificates off that path (such as a key-agreement certificate) are left out.
     /// </summary>
     public static SigningKey FromJks(JksKeyStore store, string password, string? alias = null, string? keyPassword = null)
     {
@@ -38,7 +41,7 @@ public sealed class SigningKey
         {
             List<JksPrivateKeyEntry> keys = store.PrivateKeys.ToList();
             if (keys.Count > 1)
-                keys = keys.Where(k => k.Chain.Count > 0 && (k.Chain[0].KeyUsage is not { } usage || (usage & 0b11) != 0)).ToList();
+                keys = keys.Where(k => k.Chain.Any(c => !c.IsCa && (c.KeyUsage is not { } usage || (usage & 0b11) != 0))).ToList();
             entry = keys.Count switch
             {
                 1 => keys[0],
@@ -47,6 +50,10 @@ public sealed class SigningKey
                     $"The key store holds several keys; choose one by alias: {string.Join(", ", store.PrivateKeys.Select(k => k.Alias))}."),
             };
         }
-        return new SigningKey(entry.GetPrivateKey(keyPassword ?? password), entry.Chain);
+        Dstu4145PrivateKey key = entry.GetPrivateKey(keyPassword ?? password);
+        IReadOnlyList<Certificate> chain = entry.FindCertificate(key.PublicKey) is { } certificate
+            ? CertificatePathValidator.BuildChain(certificate, entry.Chain, [])
+            : entry.Chain;
+        return new SigningKey(key, chain);
     }
 }

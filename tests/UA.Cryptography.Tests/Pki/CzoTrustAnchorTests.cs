@@ -5,14 +5,19 @@ namespace UA.Cryptography.Tests.Pki;
 
 /// <summary>
 /// The current trust anchors: self-signed DSTU 4145 roots of Ukraine's Central Certification Authority
-/// (Центральний засвідчувальний орган) from the official bundle at czo.gov.ua. Public government certificates.
-/// All of them use the polynomial basis with m = 431; the national PKI does not use the optimal normal basis.
+/// (Центральний засвідчувальний орган) from the official bundle at czo.gov.ua, and the root of the National Bank's
+/// certification centre that banks' providers are certified under. Public certificates. All of them use the polynomial
+/// basis with m = 431; the national PKI does not use the optimal normal basis.
 /// </summary>
 public class CzoTrustAnchorTests
 {
-    public static TheoryData<string> Roots => new(Directory.GetFiles(TestFiles.CzoRoots, "*.cer").Select(Path.GetFileName).Order()!);
+    /// <summary>The CZO roots and the NBU root, as paths relative to the certificates folder.</summary>
+    public static TheoryData<string> Roots => new(new[] { TestFiles.CzoRoots, TestFiles.NbuRoots }
+        .SelectMany(d => Directory.GetFiles(d, "*.cer"))
+        .Select(p => Path.GetRelativePath(TestFiles.Path("certificates"), p))
+        .Order());
 
-    private static X509Certificate Load(string name) => UaPki.ParseCertificate(File.ReadAllBytes(Path.Combine(TestFiles.CzoRoots, name)));
+    private static X509Certificate Load(string name) => UaPki.ParseCertificate(File.ReadAllBytes(TestFiles.Path("certificates", name)));
 
     [Fact]
     public void TrustAnchorsArePresent() => Assert.NotEmpty(Roots);

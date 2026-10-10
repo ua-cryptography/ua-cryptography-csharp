@@ -220,7 +220,9 @@ certificate is in `certificates`.
 Verification (`CadesTests.SignatureVerifies`):
 
 1. `messageDigest` = hash of the data (the algorithm is the signer's `digestAlgorithm`).
-2. `signingCertificateV2` = hash of the signer's certificate.
+2. `signingCertificateV2` = hash of the signer's certificate; IIT and the banks also write `issuerSerial` (the issuer
+   as a `directoryName` and the serial number), which must then name the same certificate. The package writes it too
+   (`CadesSignerTests.SigningCertificateV2NamesTheIssuerAndSerialNumber`).
 3. Hash the DER of the signed attributes (`SET OF`, as `GetEncodedSignedAttributes()`) → verify `SignerInfo.signature`
    (D directly, little-endian) by the rule of section 1.
 
@@ -231,7 +233,10 @@ Variants:
 
 Levels met in practice:
 
-- **CAdES-T** — + signatureTimeStampToken;
+- **CAdES-T** — + signatureTimeStampToken. PrivatBank hands out its signatures in this shape as `.sig`: enveloped, only
+  the signer's certificate in `certificates`, and a token without the time-stamping service's certificate. Both missing
+  certificates — the CA and the TSA — are in the bundle at the signer certificate's caIssuers address, which the
+  verifier downloads when allowed (`CadesSignerTests.TimeStampWithoutTheServiceCertificateIsCompletedFromCaIssuers`);
 - **CAdES-X Long** — + completeCertificateRefs / completeRevocationRefs (level C) + certValues / revocationValues.
   Rules for the references: `OtherCertID.otherCertHash` is the hash of the certificate DER;
   `OcspResponsesID.ocspRepHash` is the hash of the `BasicOCSPResponse` DER; the hash algorithm is given in the
@@ -329,6 +334,13 @@ and the key); the integrity of the store is SHA-1 over the password (UTF-16BE), 
 contents. Inside is a PKCS#8 `PrivateKeyInfo`: version 0, the `AlgorithmIdentifier` of a DSTU 4145 key (`…3.1.1` with
 `{ named curve, DKE }`) and d as an `OCTET STRING` in **little-endian**. The certificate chain is stored next to the
 key.
+
+keytool stores the chain end entity first, but PrivatBank stores it **root first** — root, CA, the signing certificate
+(keyUsage digitalSignature, nonRepudiation) — followed by the certificate of the key-agreement key on another curve
+(keyUsage keyAgreement). That second key travels in IIT attributes of the `PrivateKeyInfo` (`1.3.6.1.4.1.19398.1.1.2.*`),
+which signing does not need. The package therefore finds the key's certificate anywhere in the chain by its public key
+and rebuilds the path from it up through its issuers, leaving out the rest
+(`JksKeyStoreTests.ChainStoredRootFirstWithAKeyAgreementCertificateIsReordered`).
 
 The format was checked on a real key; only synthetic tests remain in the repository
 (`TestPkiTests.JksRoundTripRecoversKeyAndChain`, `JksKeyStoreTests`: the two implementations read each other's stores).

@@ -370,9 +370,17 @@ internal static class UaSign
         };
         VerificationResult result = SignatureVerifier.Verify(signature, Detached, options);
         if (ini)
+        {
             Report.WriteIni(path, result, output);
+        }
         else
+        {
             Report.Write(path, result, output, args.Flag("quiet"));
+            if (!online && result.Signatures.SelectMany(r => r.Checks).Any(c => c.Status != CheckStatus.Passed
+                && c.Details.Contains("is not available", StringComparison.Ordinal)))
+                output.WriteLine("Hint: certificates are missing; --online downloads them from the certificates' caIssuers addresses, "
+                    + "or give them with --certs.");
+        }
         if (args.Optional("report") is { } reportPath)
         {
             using (var writer = new StreamWriter(reportPath, false, new UTF8Encoding(false)))

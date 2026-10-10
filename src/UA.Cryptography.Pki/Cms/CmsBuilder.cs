@@ -13,11 +13,19 @@ public static class CmsBuilder
     /// <summary>An Attribute ::= SEQUENCE { attrType, SET OF value }.</summary>
     public static byte[] Attribute(string oid, params byte[][] values) => Der.Sequence(Der.ObjectIdentifier(oid), Der.SetOf(values));
 
-    /// <summary>signingCertificateV2 (RFC 5035): one ESSCertIDv2 with the hash of the certificate, the algorithm written out.</summary>
+    /// <summary>
+    /// signingCertificateV2 (RFC 5035): one ESSCertIDv2 with the hash of the certificate, the algorithm written out, and
+    /// issuerSerial — the issuer as a directoryName and the serial number — as IIT and the banks write it.
+    /// </summary>
     public static byte[] SigningCertificateV2(Certificate certificate, string hashOid) =>
         Attribute(Oids.SigningCertificateV2, Der.Sequence(Der.Sequence(Der.Sequence(
             Der.AlgorithmIdentifier(hashOid),
-            Der.OctetString(PkiAlgorithms.Hash(hashOid, certificate.Encoded))))));
+            Der.OctetString(PkiAlgorithms.Hash(hashOid, certificate.Encoded)),
+            IssuerSerial(certificate)))));
+
+    /// <summary>IssuerSerial ::= SEQUENCE { issuer GeneralNames, serialNumber }, the issuer as GeneralName directoryName [4].</summary>
+    public static byte[] IssuerSerial(Certificate certificate) =>
+        Der.Sequence(Der.Sequence(Der.Explicit(4, certificate.Issuer.Encoded)), Der.Integer(certificate.SerialNumber));
 
     /// <summary>
     /// The DER SET OF signed attributes for <paramref name="content"/>: contentType, the extra attributes, messageDigest and

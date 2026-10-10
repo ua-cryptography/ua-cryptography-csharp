@@ -107,16 +107,27 @@ Every signature is reported check by check — `[ OK ]`, `[WARN]`, `[FAIL]`:
 - the binding to the data (messageDigest, ds:Reference digests) and to the certificate (signingCertificateV2,
   SigningCertificateV2), the DSTU 4145 signature;
 - time-stamps: the imprint, the service's signature and certificate path; the time-stamp time becomes the validation
-  time;
+  time. A token without the service's certificate (as PrivatBank's) cannot be checked offline: that is a warning and
+  the claimed signing time is used instead;
 - CAdES-X Long references against their values;
 - the certificate path: each signature, the validity periods at the validation time, CA flags, the trust anchor
   (`--trust`; without it the root is reported with a warning), and an OCSP response for every certificate below the
-  root — embedded in the signature, or asked online with `--online`;
+  root — embedded in the signature, or asked online with `--online`. `--online` also downloads the certificates a
+  signature leaves out from the caIssuers address of the signer's certificate: providers publish there their CA and
+  their time-stamping and OCSP services' certificates;
 - for containers: the mimetype entry, the manifest, and that every data file is covered by a signature.
 
 A signature is valid when no check failed; warnings mark what could not be established (no trusted root given, no
-revocation data). Trusted roots for qualified signatures are the ЦЗО certificates
-(`tests/UA.Cryptography.Tests/TestData/certificates/czo-roots` holds the current ones).
+revocation data). With `--trust`, a path that cannot be completed up to a trusted root fails; without it, it is a
+warning. When certificates are missing, the output ends with a hint to use `--online` or `--certs`.
+
+Trusted roots for qualified signatures are the ЦЗО certificates (`tests/UA.Cryptography.Tests/TestData/certificates/czo-roots`
+holds the current ones); providers of banks, PrivatBank among them, are certified under the root of the National Bank's
+certification centre instead (`…/certificates/nbu-roots`). A signature PrivatBank hands out (`.sig`, CAdES-T):
+
+```bash
+ua-sign verify --in document.txt.sig --trust nbu-root-2036-dstu7564.cer --online
+```
 
 ### The INI report
 

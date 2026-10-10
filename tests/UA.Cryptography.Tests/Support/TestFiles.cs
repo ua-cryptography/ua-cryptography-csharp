@@ -15,7 +15,10 @@ internal static class TestFiles
     /// <summary>Current self-signed roots of the Central Certification Authority (ЦЗО).</summary>
     public static string CzoRoots => Path("certificates", "czo-roots");
 
-    /// <summary>Public intermediate (issuing) CA certificates that chain to <see cref="CzoRoots"/>.</summary>
+    /// <summary>The self-signed root of the National Bank's certification centre, under which banks' providers are certified.</summary>
+    public static string NbuRoots => Path("certificates", "nbu-roots");
+
+    /// <summary>Public intermediate (issuing) CA certificates that chain to <see cref="CzoRoots"/> or <see cref="NbuRoots"/>.</summary>
     public static string Intermediates => Path("certificates", "intermediates");
 
     /// <summary>Reference vectors produced by other implementations (see <c>tools/</c>).</summary>

@@ -46,17 +46,7 @@ public static class CertificatePathValidator
             Certificate? issuer = FindIssuer(current, candidates);
             if (issuer is null && downloads is not null)
             {
-                foreach (string url in current.CaIssuerUrls)
-                {
-                    try
-                    {
-                        candidates.AddRange(downloads.Download(url));
-                    }
-                    catch (Exception e) when (e is HttpRequestException or InvalidDataException or TaskCanceledException)
-                    {
-                        // the issuer stays unknown; reported by the caller
-                    }
-                }
+                candidates.AddRange(DownloadIssuers(current, downloads));
                 issuer = FindIssuer(current, candidates);
             }
             if (issuer is null || chain.Contains(issuer))
@@ -65,6 +55,28 @@ public static class CertificatePathValidator
             current = issuer;
         }
         return chain;
+    }
+
+    /// <summary>
+    /// The certificates published at the caIssuers addresses of <paramref name="certificate"/>; a download that fails is
+    /// skipped (what stays missing is reported by the caller). Providers publish their whole set there — the CA, its
+    /// time-stamping and OCSP services — so it also completes a time-stamp token that carries no certificate.
+    /// </summary>
+    public static List<Certificate> DownloadIssuers(Certificate certificate, ICertificateSource downloads)
+    {
+        var found = new List<Certificate>();
+        foreach (string url in certificate.CaIssuerUrls)
+        {
+            try
+            {
+                found.AddRange(downloads.Download(url));
+            }
+            catch (Exception e) when (e is HttpRequestException or InvalidDataException or TaskCanceledException)
+            {
+                // skipped; see the summary
+            }
+        }
+        return found;
     }
 
     private static Certificate? FindIssuer(Certificate certificate, IEnumerable<Certificate> candidates)

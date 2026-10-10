@@ -34,10 +34,10 @@ internal static class PkiLayer
         Ocsp = new Ocsp(pki),
     };
 
-    /// <summary>The hierarchy's TSA, called directly.</summary>
-    public sealed class TimeStamps(Hierarchy pki) : ITimeStampService
+    /// <summary>The hierarchy's TSA, called directly; <paramref name="includeCertificate"/> false leaves its certificate out of the tokens.</summary>
+    public sealed class TimeStamps(Hierarchy pki, bool includeCertificate = true) : ITimeStampService
     {
-        public TimeStampToken GetToken(byte[] hash, string hashOid) => TimeStampToken.Load(pki.Tsa.StampHash(hash, hashOid));
+        public TimeStampToken GetToken(byte[] hash, string hashOid) => TimeStampToken.Load(pki.Tsa.StampHash(hash, hashOid, includeCertificate));
     }
 
     /// <summary>The hierarchy's OCSP responders: the issuing CA's for its certificates, the root's for the root's.</summary>
