@@ -1,7 +1,9 @@
 name: Release
 
-# Publishes UA.Cryptography to nuget.org when a version tag (v1.2.3, v1.2.3-beta.1) is pushed.
-# Authentication uses nuget.org Trusted Publishing: no API key is stored in the repository.
+# Publishes UA.Cryptography when a version tag (v1.2.3, v1.2.3-beta.1) is pushed:
+# to nuget.org, to GitHub Packages, and as a GitHub release with the packages attached.
+# nuget.org authentication uses Trusted Publishing: no API key is stored in the repository.
+# Every push uses --skip-duplicate, so a failed run can be re-run after a partial publish.
 
 on:
   push:
@@ -14,7 +16,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # create the GitHub release
+      packages: write # push to GitHub Packages
       id-token: write # OIDC token exchanged for a short-lived nuget.org API key
     steps:
       - uses: actions/checkout@v4
@@ -43,14 +46,32 @@ jobs:
         with:
           user: ${{ secrets.NUGET_USER }}
 
-      # The .snupkg next to the .nupkg is pushed to the symbol server automatically.
-      - name: Push
+      # The .snupkg next to the .nupkg is pushed to the nuget.org symbol server automatically.
+      - name: Push to nuget.org
         run: >
           dotnet nuget push "artifacts/*.nupkg"
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: packages
-          path: artifacts
+      # GitHub Packages has no symbol server.
+      - name: Push to GitHub Packages
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --api-key ${{ secrets.GITHUB_TOKEN }}
+          --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+          --skip-duplicate
+          --no-symbols
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          if [[ "$VERSION" == *-* ]]; then prerelease="--prerelease"; fi
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" artifacts/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" artifacts/* \
+              --verify-tag --title "$GITHUB_REF_NAME" --generate-notes $prerelease
+          fi
