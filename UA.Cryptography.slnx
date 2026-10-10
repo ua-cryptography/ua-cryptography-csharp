@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/UA.Cryptography/UA.Cryptography.csproj" />
+    <Project Path="src/UA.Cryptography.Pki/UA.Cryptography.Pki.csproj" />
+    <Project Path="src/UA.Cryptography.Cli/UA.Cryptography.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/UA.Cryptography.Tests/UA.Cryptography.Tests.csproj" />

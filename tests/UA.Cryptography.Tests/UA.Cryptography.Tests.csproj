@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\UA.Cryptography\UA.Cryptography.csproj" />
+    <ProjectReference Include="..\..\src\UA.Cryptography.Pki\UA.Cryptography.Pki.csproj" />
+    <ProjectReference Include="..\..\src\UA.Cryptography.Cli\UA.Cryptography.Cli.csproj" />
   </ItemGroup>
 
 </Project>

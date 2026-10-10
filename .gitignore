@@ -36,6 +36,7 @@ Thumbs.db
 *.ZS2
 Key-6.dat
 /test_data/
+/private/
 
 # The text of DSTU 4145-2002 is copyrighted (Derzhstandart of Ukraine) and may not be redistributed;
 # keep a local copy only.

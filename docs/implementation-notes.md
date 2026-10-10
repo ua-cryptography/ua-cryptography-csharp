@@ -83,6 +83,22 @@ Every level is checked by at least one independent source:
 | DSTU 7564 | 17 test examples from the standard and the Kupyna paper; BouncyCastle at lengths around the block and length-field boundaries |
 | DSTU 7624 | Test examples of the standard for all modes; 590 vectors from BouncyCastle Java 1.86 (`tools/dstu7624-vectors`) |
 | Signature formats | The synthetic PKI mirrors the national chain; XAdES, ASiC-E, CAdES (B, T, X Long), ASiC-S, PAdES (B, LTA), RFC 3161 timestamps and OCSP are verified by the same functions that accept the real certificates; BouncyCastle confirms the structure of timestamps and OCSP |
+| DER (`UA.Cryptography.Pki.Asn1`) | Byte-for-byte against BouncyCastle: INTEGER edge values, OIDs with large arcs, every length form, SET OF ordering, named bits, times; BER indefinite lengths and constructed strings read; malformed input and deep nesting rejected |
+| X.509 and DSTU 4145 keys | All 10 public certificates of `TestData` parsed field by field as BouncyCastle parses them, keys equal to those of the test recipe; their signatures verify; certificates the package issues are parsed by BouncyCastle and verified by the test recipe; ONB and the big-endian key OID round-trip |
+| JKS | The package and the independent test implementation read each other's stores; several entries, modified UTF-8 aliases, wrong store and key passwords, damaged bytes |
+| XML canonicalization | Microsoft's `System.Security.Cryptography.Xml` (in the tests only): inclusive and exclusive C14N, with and without comments, of nine tricky documents, of every element subtree, of "#id" references (the digest `SignedXml` computes), with an InclusiveNamespaces prefix list and the enveloped-signature transform |
+| CAdES, XAdES, ASiC in the package | Every signature the package makes is verified by the BouncyCastle / Microsoft based recipes of the tests, and every signature of the test builders by the package; tampered data, signature values and signed properties, a certificate swapped for a twin, a time-stamp over other bytes, duplicate Ids (signature wrapping), unsigned and replaced container entries |
+| Certification paths, OCSP, HTTP | The real "Дія" CA up to a ЦЗО root; expiry, an impostor root, a non-CA issuer, an unauthorized OCSP responder; the HTTP clients against a local server whose requests are parsed by BouncyCastle |
+| ua-sign | In process, end to end: keygen → sign in every format and level (T and LT over HTTP) → verify with the exit codes; tampering; usage errors |
+
+**Mutation check of the PKI layer** (step 7 of the project's procedure for new functionality): each of the following
+deliberate bugs was introduced alone, the whole test suite was run, and the file restored. Number of failing tests:
+the hash not reversed before signing — 37; D stored big-endian — 38; signed attributes hashed with the [0] tag instead
+of SET — 30; SET OF not sorted — 1; exclusive C14N rendering every namespace in scope — 19; attributes not sorted in
+C14N — 6; `>` not escaped in text — 4; inherited `xml:` attributes not copied in inclusive C14N — 1; the JKS
+keystream shifted by one block — 2; d big-endian in PKCS#8 — 20; the public key not reversed on read — 82;
+messageDigest not compared — 3; OCSP responder authorization skipped — 1; duplicate Ids accepted — 1; the issuer's
+signature not checked while building a path — 1; the time-stamp imprint not compared — 3; a wrong first OID arc — 54.
 
 ## 4. Alternatives: what BouncyCastle can do
 
@@ -134,10 +150,10 @@ the standard.
 
 ## 6. Possible next steps
 
-- An ASN.1/X.509/CMS layer for keys, certificates and signed documents (conventions in
-  [signature-formats.md](signature-formats.md); the verification recipes already exist in the tests,
-  `tests/UA.Cryptography.Tests/Support/UaPki.cs`).
-- Key containers: JKS (the format is pinned down in the tests), PKCS#12, IIT containers.
+- PAdES in `UA.Cryptography.Pki`: a PDF reader with cross-reference streams and object streams, incremental updates
+  for the signature field, the DSS and the document timestamp.
+- Key containers: PKCS#12, IIT containers (JKS is done).
+- CRLs, archive timestamps (XAdES-B-LTA, CAdES-A), certificate policies and qcStatements in path validation.
 - Faster signing: precomputation for the fixed base point (comb/window) makes kP for eP several times faster; in
   verification, joint computation of sP + rQ (Shamir's trick).
 - Faster field arithmetic: Karatsuba for m ≥ 300, specialised reduction for trinomials.

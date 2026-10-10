@@ -15,11 +15,15 @@ internal sealed class OcspResponder(TestPki.TestIdentity identity)
 {
     public TestPki.TestIdentity Identity { get; } = identity;
 
-    public BasicOcspResponse Respond(X509Certificate certificate, X509Certificate issuer)
+    /// <param name="zeroKeyHash">Fill the CertID issuerKeyHash with zeros, as the "Дія" responder does.</param>
+    public BasicOcspResponse Respond(X509Certificate certificate, X509Certificate issuer, bool zeroKeyHash = false)
     {
+        byte[] keyHash = UaPki.Hash(Oids.Dstu7564_256, issuer.CertificateStructure.SubjectPublicKeyInfo.PublicKey.GetBytes());
+        if (zeroKeyHash)
+            Array.Clear(keyHash);
         var certId = new CertID(new AlgorithmIdentifier(new DerObjectIdentifier(Oids.Dstu7564_256)),
             new DerOctetString(UaPki.Hash(Oids.Dstu7564_256, issuer.SubjectDN.GetEncoded())),
-            new DerOctetString(UaPki.Hash(Oids.Dstu7564_256, issuer.CertificateStructure.SubjectPublicKeyInfo.PublicKey.GetBytes())),
+            new DerOctetString(keyHash),
             new DerInteger(certificate.SerialNumber));
         var now = new DerGeneralizedTime(DateTime.UtcNow);
         var single = new SingleResponse(certId, new CertStatus(), now, null, null);

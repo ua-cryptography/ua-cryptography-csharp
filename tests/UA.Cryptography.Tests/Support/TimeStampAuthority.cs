@@ -18,13 +18,17 @@ internal sealed class TimeStampAuthority(TestPki.TestIdentity identity)
     public TestPki.TestIdentity Identity { get; } = identity;
 
     /// <summary>A DER-encoded time-stamp token whose message imprint is the hash of <paramref name="covered"/>.</summary>
-    public byte[] Stamp(byte[] covered, string hashOid, bool includeCertificate = true)
+    public byte[] Stamp(byte[] covered, string hashOid, bool includeCertificate = true) =>
+        StampHash(UaPki.Hash(hashOid, covered), hashOid, includeCertificate);
+
+    /// <summary>A token over an already computed hash, with the request's nonce when one is given.</summary>
+    public byte[] StampHash(byte[] hash, string hashOid, bool includeCertificate = true, BcBigInteger? nonce = null)
     {
         string policy = hashOid == Oids.Gost34311 ? Oids.TspPolicyGost34311 : Oids.TspPolicyDstu7564;
-        var imprint = new MessageImprint(new AlgorithmIdentifier(new DerObjectIdentifier(hashOid)), UaPki.Hash(hashOid, covered));
+        var imprint = new MessageImprint(new AlgorithmIdentifier(new DerObjectIdentifier(hashOid)), hash);
         var info = new TstInfo(new DerObjectIdentifier(policy), imprint,
             new DerInteger(BcBigInteger.ValueOf(Interlocked.Increment(ref _serial))),
-            new DerGeneralizedTime(DateTime.UtcNow), null, null, null, null, null);
+            new DerGeneralizedTime(DateTime.UtcNow), null, null, nonce is null ? null : new DerInteger(nonce), null, null);
 
         return CmsBuilder.Sign(info.GetDerEncoded(), PkcsObjectIdentifiers.IdCTTstInfo, encapsulate: true, Identity,
             includeCertificate ? [Identity.Certificate] : [], hashOid).GetDerEncoded();

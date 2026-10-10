@@ -7,11 +7,14 @@ PKI; in the repository they are reproduced by a **synthetic PKI** (section 13), 
 **The goal is to be able to verify signatures of any format.** The end of the document lists what is already covered
 by tests and what remains to be done.
 
-Code references: `src/UA.Cryptography` (cryptography), `tests/UA.Cryptography.Tests` — format tests in `Signatures/`
-(`CadesTests`, `XadesTests`, `PadesTests`), certificates in `Pki/`, shared helpers in `Support/` (`UaPki` —
-verification, `TestPki`/`Hierarchy` — the synthetic PKI, `*Builder` — building signatures). In the tests ASN.1 is
-parsed by BouncyCastle and XML is canonicalized by `System.Security.Cryptography.Xml`; the hashes and DSTU 4145 are the
-library's own code only.
+Code references: `src/UA.Cryptography` (cryptography), `src/UA.Cryptography.Pki` (the formats themselves: DER, X.509,
+JKS, CMS/CAdES, timestamps, OCSP, XML canonicalization, XAdES, ASiC — no third-party dependencies),
+`tests/UA.Cryptography.Tests` — format tests in `Signatures/` (`CadesTests`, `XadesTests`, `PadesTests`) and
+`Pki/<namespace>/`, certificates in `Pki/`, shared helpers in `Support/` (`UaPki` — verification, `TestPki`/`Hierarchy`
+— the synthetic PKI, `*Builder` — building signatures). The helpers of `Support/` are a second, independent
+implementation of the same recipes: there ASN.1 is parsed by BouncyCastle and XML is canonicalized by
+`System.Security.Cryptography.Xml`, and every signature of one implementation is verified by the other (section 13).
+The hashes and DSTU 4145 are the library's own code in both.
 
 The Ukrainian abbreviations used below: **ЦЗО** — the Central Certification Authority (Центральний засвідчувальний
 орган), the national root; **ЦСК** — a key certification centre, i.e. a qualified CA; **КНЕДП** — a qualified trust
@@ -30,7 +33,8 @@ In every format checked and for both hashes (GOST 34.311 and DSTU 7564) the same
 | Hashes inside structures (DigestValue in XML, messageDigest in CMS, certificate hashes, timestamp imprints) | the hash function output as is | compare directly, reverse nothing |
 | Compressed point (public key, base point), coefficient B | little-endian if the key OID is `…3.1.1`; big-endian if `…3.1.1.1.1` | reverse for "LE" and recover the point by 6.10 |
 
-In code this is a single function (`UaPki.VerifyDstu4145`):
+In code this is a single function (`UaPki.VerifyDstu4145` in the tests, `Dstu4145PublicKey.VerifyHash` in the
+package):
 
 ```csharp
 signer.VerifyHash(publicKey, Reverse(hash), Reverse(signatureValue));
@@ -130,6 +134,9 @@ roots, GOST 34.311 and DSTU 7564), `ChainToTrustAnchorTests`, `XadesTests.Signer
 - `responderID` is by name; the responder's certificate is embedded in the response itself (`certs`).
 - The signature value is stored as in a certificate (`BIT STRING` → `OCTET STRING` → D).
 - `CertID` uses the DSTU 7564-256 hash; the `good` status is tag 0.
+- The "Дія" responder fills `CertID.issuerKeyHash` with zeros; such a response is matched by `serialNumber` and
+  `issuerNameHash` alone, and the responder's authorization by the issuer binds it to the issuer's key
+  (`PathValidationTests.OcspWithAZeroIssuerKeyHashIsMatchedByNameAndSerial`).
 
 Tests: `TestPkiTests.OcspResponseIsSignedByTheResponderAndGood`, `CadesTests.LongTermValidationDataIsConsistent`,
 `XadesTests.RevocationValuesAreSignedAndGood`, `PadesTests.DocumentSecurityStoreIsComplete` (in PDF and XAdES the OCSP
@@ -301,6 +308,11 @@ containers).
 | `CadesTests` | ASiC-S (`.asics`) | CAdES-T, detached | GOST 34.311 |
 | `PadesTests` | PDF | PAdES-B-B, PAdES-B-LTA (DSS and document timestamp) | DSTU 7564-256 |
 | `TestPkiTests` | — | RFC 3161 timestamp, OCSP response, JKS | DSTU 7564-256, GOST 34.311 |
+| `Pki/Cades/CadesSignerTests` | `.p7s` | the package's CAdES-B/T/X Long ↔ the BouncyCastle recipes; `CadesBuilder` ↔ the package | DSTU 7564-256, GOST 34.311 |
+| `Pki/Xades/XadesSignerTests` | XML next to the files | the package's XAdES-B-B/T/LT ↔ Microsoft's C14N; `XadesBuilder` ↔ the package; wrapping | DSTU 7564-256, GOST 34.311 |
+| `Pki/Asic/AsicContainerTests` | ASiC-S, ASiC-E | the package's containers and the builders', unsigned and replaced entries | DSTU 7564-256, GOST 34.311 |
+| `Pki/Tsp`, `Pki/Services`, `Pki/Validation` | — | timestamps, HTTP TSP/OCSP through a local server, certification paths | DSTU 7564-256, GOST 34.311 |
+| `Cli/UaSignTests` | every format | `ua-sign` keygen → sign → verify, levels T and LT over HTTP | DSTU 7564-256, GOST 34.311 |
 
 The structural correctness of the synthetic timestamps and OCSP responses is additionally confirmed by BouncyCastle
 (`TimeStampToken`, `BasicOcspResp`), and the byte order by the fact that the same verification functions (`UaPki`)
@@ -310,21 +322,32 @@ accept the real certificates of ЦЗО, the "Дія" CA and the CAs of 2005–20
 
 ## 14. Key containers
 
-The library does not read key containers, but the format of one of them is pinned down in the tests (`Support/Jks`):
-**Sun JKS** (the format in which PrivatBank, for example, issues keys). A `PrivateKeyEntry` record; the key is protected
+`UA.Cryptography.Pki` reads and writes one of them (`KeyStore/JksKeyStore`), and the tests keep an independent
+implementation of the same format (`Support/Jks`): **Sun JKS** (the format in which PrivatBank, for example, issues keys). A `PrivateKeyEntry` record; the key is protected
 by the "Sun key protector" (`1.3.6.1.4.1.42.2.17.1.1`: 20-byte salt ‖ key XOR a SHA-1 keystream ‖ SHA-1 of the password
 and the key); the integrity of the store is SHA-1 over the password (UTF-16BE), the string "Mighty Aphrodite" and the
 contents. Inside is a PKCS#8 `PrivateKeyInfo`: version 0, the `AlgorithmIdentifier` of a DSTU 4145 key (`…3.1.1` with
 `{ named curve, DKE }`) and d as an `OCTET STRING` in **little-endian**. The certificate chain is stored next to the
 key.
 
-The format was checked on a real key; only a synthetic test remains in the repository
-(`TestPkiTests.JksRoundTripRecoversKeyAndChain`). IIT containers (`Key-6.dat`, `.ZS2`) and PKCS#12 have not been
-analysed yet.
+The format was checked on a real key; only synthetic tests remain in the repository
+(`TestPkiTests.JksRoundTripRecoversKeyAndChain`, `JksKeyStoreTests`: the two implementations read each other's stores).
+The package also accepts several entries (choosing the signing key by alias or by keyUsage), trusted certificate
+entries, Java's modified UTF-8 in aliases, and d written the BouncyCastle way (a DER INTEGER, big-endian, inside the
+OCTET STRING). IIT containers (`Key-6.dat`, `.ZS2`) and PKCS#12 have not been analysed yet.
+
+## 15. Which DKE GOST 34.311 hashes with
+
+For certificates and OCSP responses the rule is established on real data: the DKE of the **issuer's** key, DKE No. 1
+when there is none (section 4). For the data and the signed parts of CMS and XAdES (messageDigest, ds:Reference, the
+signed attributes, ds:SignedInfo) the formats carry no DKE and no real signature with a non-default DKE has been
+examined. The package therefore signs with the DKE of the signer's key and, when verifying, accepts the hash with the
+signer's DKE or with DKE No. 1 (`PkiAlgorithms.CandidateHashes`). The two coincide for every current certificate:
+neither the "Дія" certificates nor the keys `ua-sign keygen` creates carry a different table.
 
 ---
 
-## 15. What is verified and what is not
+## 16. What is verified and what is not
 
 Verified (tests):
 
@@ -346,5 +369,9 @@ Not done yet (needed for "any format"):
 - **Other containers**: XAdES enveloped/enveloping; PDFs with several signatures, with changes after signing (DocMDP,
   checking that updates after the signature are permitted), with cross-references in streams (`/XRef`, `/ObjStm`).
 - **Other parameters**: DSTU 7564-384/512, curves with m ≠ 257/431, the normal basis (not used in the national PKI).
-- **The library's own ASN.1 parsing and XML canonicalization** (currently BouncyCastle and
-  `System.Security.Cryptography.Xml` in the tests).
+- **PAdES in the package**: signing and verifying PDF needs a real PDF parser (cross-reference streams, object
+  streams) and incremental updates; so far only the tests handle the simple PDFs of `PadesBuilder`.
+
+Done in `UA.Cryptography.Pki` since the list was written: the library's own ASN.1, X.509, CMS and XML canonicalization;
+the certification path with validity periods, CA flags, a trust anchor list and the authorization of OCSP responders;
+several signatures in one ASiC-E.

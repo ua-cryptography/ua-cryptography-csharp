@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>UA.Cryptography.Pki</RootNamespace>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Members named after the ASN.1 field they expose are not documented one by one. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>UA.Cryptography.Pki</PackageId>
+    <Description>Ukrainian PKI formats on top of UA.Cryptography, without third-party dependencies: DER, X.509 with DSTU 4145 keys, JKS key stores, CMS/CAdES (B, T, X-Long), RFC 3161 time-stamps, OCSP, XML canonicalization, XAdES (B, T, LT), ASiC-S and ASiC-E, certificate path validation.</Description>
+    <PackageTags>dstu4145;dstu7564;gost34311;cades;xades;asic;cms;x509;jks;ocsp;tsp;ukraine;pki;signature</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\UA.Cryptography\UA.Cryptography.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="UA.Cryptography.Tests" />
+  </ItemGroup>
+
+</Project>

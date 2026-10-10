@@ -15,6 +15,14 @@ Signatures are compatible with the Ukrainian PKI: the tests check real certifica
 Authority (ЦЗО) and of qualified CAs (ЦСК), and XAdES, CAdES, ASiC and PAdES signatures at every level (timestamps,
 OCSP, DSS) are built by a synthetic PKI of the same shape and verified by the library code.
 
+On top of it, also without third-party dependencies:
+
+- **UA.Cryptography.Pki** — DER, X.509 with DSTU 4145 keys, JKS key stores, CMS/CAdES (B, T, X Long), RFC 3161
+  timestamps, OCSP, inclusive and exclusive XML canonicalization, XAdES (B, T, LT), ASiC-S and ASiC-E, certification
+  path validation;
+- **ua-sign** — a command-line tool that creates keys in JKS, signs files in all these formats and verifies them
+  ([docs/ua-sign.md](docs/ua-sign.md)), with launch scripts in `scripts/`.
+
 The appendices and clauses of DSTU 4145-2002 are cited by their original Cyrillic designators: Appendix А, Б, В, Г
 (the first to the fourth appendix), clauses Б.1, В.8, tables Г.1, Г.2 and so on. The text of the standard is not
 included in the repository: it is copyrighted by Derzhstandart of Ukraine and may not be redistributed.
@@ -75,13 +83,26 @@ byte[] opened = gcm.Decrypt(nonce, associatedData, sealedData, macBits: 256); //
 | DSTU 7564:2014 | Kupyna | `Dstu7564/Dstu7564Hash.cs` |
 | DSTU 7624:2014 | Kalyna, one file per mode | `Dstu7624/` |
 
+The PKI layer (`src/UA.Cryptography.Pki/`, [docs/signature-formats.md](docs/signature-formats.md)):
+
+| Format | Standard | Code (`src/UA.Cryptography.Pki/`) |
+|---|---|---|
+| DER / BER | X.690 | `Asn1/` |
+| Certificates, DSTU 4145 keys (SPKI, PKCS#8) | RFC 5280, RFC 5208 | `X509/` |
+| JKS key store | Sun JKS, the Sun key protector | `KeyStore/` |
+| CMS, CAdES | RFC 5652, ETSI EN 319 122 | `Cms/`, `Cades/` |
+| Timestamps, OCSP, HTTP clients | RFC 3161, RFC 6960 | `Tsp/`, `Ocsp/`, `Services/` |
+| Canonical XML, XAdES | W3C C14N 1.0, Exclusive C14N 1.0, ETSI EN 319 132 | `Xml/`, `Xades/` |
+| ASiC-S, ASiC-E | ETSI EN 319 162 | `Asic/` |
+| Certification paths | RFC 5280, section 6 (subset) | `Validation/` |
+
 ## Build and test
 
-Requires the .NET 10 SDK (the library targets .NET 8, the tests and the benchmark target .NET 10).
+Requires the .NET 10 SDK (the libraries target .NET 8; the tests, the benchmark and ua-sign target .NET 10).
 
 ```bash
 dotnet build
-dotnet test                                                        # 638 tests, a few seconds
+dotnet test                                                        # 823 tests, a few seconds
 dotnet run -c Release --project bench/UA.Cryptography.Benchmarks             # benchmark
 dotnet run -c Release --project bench/UA.Cryptography.Benchmarks -- --portable # without PMULL/PCLMUL
 ```
@@ -105,6 +126,12 @@ What the tests check (`tests/UA.Cryptography.Tests`, folders mirror the library 
   OCSP): XAdES-B-B/T/LT as a separate file and inside ASiC-E, CAdES-B/T/X Long enveloped and detached, ASiC-S,
   PAdES-B-B and PAdES-B-LTA (DSS, document timestamp), RFC 3161 timestamps, OCSP responses, a JKS key store. The tests
   need no personal data, and none is stored in the repository.
+- **The PKI layer and ua-sign** (`Pki/Asn1` … `Pki/Xades`, `Cli/`): DER against BouncyCastle; the real certificates
+  parsed field by field as BouncyCastle parses them; JKS against the independent test implementation in both
+  directions; C14N against Microsoft's implementation (used only in the tests); every signature the package makes is
+  verified by the BouncyCastle-based recipes of the tests, and every signature of the test builders by the package;
+  HTTP time-stamping and OCSP through a local server; the command line end to end. A mutation check (17 deliberate
+  bugs, each caught) is described in [docs/implementation-notes.md](docs/implementation-notes.md).
 
 ## Performance
 
@@ -140,15 +167,18 @@ this library replaces: ONB multiplication at m = 173 went from 217 µs to 55 ns,
 - The library has not been audited. Big-integer arithmetic is `System.Numerics.BigInteger` (not constant time), and
   the portable carry-less multiplication uses a 4-bit window table. The Montgomery ladder and the hardware path are
   regular, but protection against side-channel attacks was not a goal.
-- There is no ASN.1/X.509/CMS/XML layer and no key containers: in the tests BouncyCastle does the parsing, and the
-  recipes for verifying every format are collected in `tests/UA.Cryptography.Tests/Support/UaPki.cs` and described in
-  [docs/signature-formats.md](docs/signature-formats.md).
+- `UA.Cryptography` itself has no ASN.1/X.509/CMS/XML layer; that is `UA.Cryptography.Pki`. It does not do PAdES,
+  CRLs, archive timestamps, PKCS#12 or IIT key containers, and does not evaluate certificate policies
+  ([docs/ua-sign.md](docs/ua-sign.md), "What is not supported").
 - By default random numbers come from the OS `RandomNumberGenerator`; the generator of Appendix А
   (`Dstu4145RandomGenerator`) can be passed to `Dstu4145Signer`.
 
 ## Repository layout
 
 ```
+src/UA.Cryptography.Pki/          DER, X.509, JKS, CMS/CAdES, TSP, OCSP, C14N, XAdES, ASiC, paths (net8.0)
+src/UA.Cryptography.Cli/          ua-sign, the command-line tool (net10.0)
+scripts/                          launch scripts for ua-sign (.sh and .ps1), publish, demo
 src/UA.Cryptography/              the library (net8.0, no dependencies)
   Math/                           GF(2)[x], PB and ONB fields, basis conversion, primality
   EC/                             curve, points, Montgomery ladder
@@ -158,7 +188,8 @@ src/UA.Cryptography/              the library (net8.0, no dependencies)
   Dstu7624/                       DSTU 7624:2014 (Kalyna) and its modes
   Common/                         S-boxes shared by DSTU 7564/7624
 tests/UA.Cryptography.Tests/      xUnit; folders mirror the library namespaces
-  Pki/, Signatures/               certificates and signature formats
+  Pki/, Signatures/               certificates and signature formats; Pki/<namespace>/ the PKI layer
+  Cli/                            ua-sign end to end
   Support/                        synthetic PKI, builders and format verification
   TestData/                       public certificates and reference vectors
 bench/UA.Cryptography.Benchmarks/ benchmark (Markdown table)
@@ -170,6 +201,7 @@ docs/                             signature formats, implementation notes, porti
 
 - [docs/signature-formats.md](docs/signature-formats.md) — XAdES, CAdES, PAdES, ASiC, timestamps and OCSP in the
   Ukrainian PKI, and how to verify them.
+- [docs/ua-sign.md](docs/ua-sign.md) — the command-line tool, its scripts, and the PKI library underneath.
 - [docs/implementation-notes.md](docs/implementation-notes.md) — errors in the text of the standard, PKI conventions,
   what verifies each layer, differences from the 2010 project.
 - [docs/porting.md](docs/porting.md) — porting to other languages.

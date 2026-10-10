@@ -25,6 +25,19 @@ Port bottom-up, running the tests of each layer at every step:
 7. **`Dstu7624/*`** — Kalyna and its modes: a translation of BouncyCastle Java 1.86, one file per mode; the reference
    vectors for any language are in `tests/UA.Cryptography.Tests/TestData/vectors/dstu7624-bc-java-1.86.json`.
 
+Then the PKI layer (`src/UA.Cryptography.Pki`), which uses nothing but the standard library of the target language
+(SHA-1/SHA-256, ZIP, an XML parser, HTTP):
+
+8. **`Asn1/`** — a DER/BER reader that keeps the exact bytes of every element (signatures cover them) and a DER writer
+   made of small functions; tests: `Pki/Asn1/DerTests`.
+9. **`X509/`, `KeyStore/`** — certificates, the DSTU 4145 key in SubjectPublicKeyInfo and PKCS#8 (byte order by the key
+   OID), the Sun JKS store; tests: the real certificates of `TestData`, `JksKeyStoreTests`.
+10. **`Cms/`, `Tsp/`, `Ocsp/`, `Cades/`** — SignedData, timestamps, OCSP; the signed attributes are hashed as a SET
+    (tag `31`), not with their `[0]` tag.
+11. **`Xml/`** — Canonical XML 1.0 and Exclusive C14N 1.0 over the DOM of the language; port the documents of
+    `XmlCanonicalizerTests` together with the expected outputs (they can be produced once with any C14N implementation).
+12. **`Xades/`, `Asic/`, `Validation/`** — the formats and the certification path.
+
 ## Conventions that are easy to get wrong
 
 - **The standard representation of a field element (5.3)** is an m-bit string written as a hexadecimal number. In PB,

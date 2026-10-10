@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes UA.Cryptography when a version tag (v1.2.3, v1.2.3-beta.1) is pushed:
+# Publishes UA.Cryptography and UA.Cryptography.Pki when a version tag (v1.2.3, v1.2.3-beta.1) is pushed:
 # to nuget.org, to GitHub Packages, and as a GitHub release with the packages attached.
 # nuget.org authentication uses Trusted Publishing: no API key is stored in the repository.
 # Every push uses --skip-duplicate, so a failed run can be re-run after a partial publish.
@@ -39,7 +39,9 @@ jobs:
         run: dotnet test --no-build -c Release
 
       - name: Pack
-        run: dotnet pack src/UA.Cryptography --no-build -c Release -p:Version=$VERSION -o artifacts
+        run: |
+          dotnet pack src/UA.Cryptography --no-build -c Release -p:Version=$VERSION -o artifacts
+          dotnet pack src/UA.Cryptography.Pki --no-build -c Release -p:Version=$VERSION -o artifacts
 
       - uses: NuGet/login@v1
         id: login
