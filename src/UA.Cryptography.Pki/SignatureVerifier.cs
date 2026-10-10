@@ -14,6 +14,9 @@ namespace UA.Cryptography.Pki;
 /// </summary>
 public static class SignatureVerifier
 {
+    /// <summary>The title of the report on an ASiC container's structure, which comes before the signatures' reports.</summary>
+    public const string ContainerTitle = "container";
+
     /// <summary>
     /// Verifies <paramref name="signature"/>. <paramref name="detached"/> resolves the data of detached signatures: it is
     /// called with the file name a XAdES reference uses, or with null for a detached CAdES; it returns null when the data
@@ -37,7 +40,7 @@ public static class SignatureVerifier
     private static VerificationResult VerifyAsic(byte[] container, ValidationOptions options)
     {
         var (mimeType, entries, firstAndStored) = AsicContainer.Read(container);
-        var structure = new VerificationReport("container");
+        var structure = new VerificationReport(ContainerTitle);
         structure.Check("mimetype", firstAndStored, firstAndStored ? $"'{mimeType}', first and stored" : "the mimetype entry must be first and uncompressed");
         List<string> data = AsicContainer.DataEntries(entries.Keys).ToList();
         var files = data.ToDictionary(n => n, n => entries[n]);

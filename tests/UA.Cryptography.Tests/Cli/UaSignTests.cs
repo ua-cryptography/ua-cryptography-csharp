@@ -1,5 +1,6 @@
 using UA.Cryptography.Cli;
 using UA.Cryptography.Pki.KeyStore;
+using UA.Cryptography.Pki.X509;
 
 namespace UA.Cryptography.Tests.Cli;
 
@@ -166,6 +167,86 @@ public sealed class UaSignTests : IDisposable
             Assert.Contains("[ OK ] signer: revocation of 'Test Signer': good", output, StringComparison.Ordinal);
             Assert.Contains("[ OK ] signer: revocation of 'Test Issuing CA': good", output, StringComparison.Ordinal);
         }
+    }
+
+    [Theory]
+    [InlineData("cades", "CAdES-X Long", "content")]
+    [InlineData("asic-e", "XAdES-B-LT", "doc.txt")]
+    public void IniReportHoldsEveryDetail(string format, string level, string reference)
+    {
+        Hierarchy pki = Hierarchy.Shared;
+        using var server = new LocalPkiServer(pki);
+        var store = new JksKeyStore();
+        store.AddPrivateKey("signer", pki.Signer.Key.ToPki(), pki.SignerChain.Select(c => c.ToPki()).ToList(), Password);
+        File.WriteAllBytes(P("signer.jks"), store.Save(Password));
+        File.WriteAllBytes(P("root.cer"), pki.Root.Certificate.GetEncoded());
+        string document = Document();
+        Assert.Equal(UaSign.Valid, Run("sign", "--keystore", P("signer.jks"), "--password", Password, "--format", format, "--level", "LT",
+            "--in", document, "--out", P("signed"), "--tsa", server.TsaUrl, "--ocsp", server.OcspUrl).Code);
+
+        var (code, output) = Run("verify", "--in", P("signed"), "--data", document, "--trust", P("root.cer"), "--format", "ini", "--report", P("report.ini"));
+        Assert.True(code == UaSign.Valid, output);
+        Dictionary<string, Dictionary<string, string>> ini = ParseIni(output);
+
+        Assert.Equal("VALID", ini["summary"]["result"]);
+        Assert.Equal("0", ini["summary"]["failures"]);
+        Dictionary<string, string> signature = ini["signature.1"];
+        Assert.Equal(level, signature["level"]);
+        Assert.Equal("DSTU 7564-256 (1.2.804.2.1.1.1.1.2.2.1)", signature["digest_algorithm"]);
+        Assert.StartsWith("DSTU 4145 with DSTU 7564-256 (", signature["signature_algorithm"], StringComparison.Ordinal);
+        Assert.Equal(signature["timestamp_time"], signature["validation_time"]);
+
+        Certificate signer = pki.Signer.Certificate.ToPki();
+        Assert.Equal(signer.Subject.ToString(), ini["signature.1.signer"]["subject"]);
+        Assert.Equal(Report.Serial(signer.SerialNumber), ini["signature.1.signer"]["serial"]);
+        Assert.Equal(reference, ini["signature.1.reference.1"]["name"]);
+        Assert.Equal(Convert.ToHexString(UaPki.Hash(Oids.Dstu7564_256, File.ReadAllBytes(document))), ini["signature.1.reference.1"]["digest"]);
+        Assert.Equal("signature time-stamp", ini["signature.1.timestamp.1"]["kind"]);
+        Assert.Equal(signature["timestamp_time"], ini["signature.1.timestamp.1"]["time"]);
+        Assert.StartsWith("CN=Test TSP Server,", ini["signature.1.timestamp.1"]["authority"], StringComparison.Ordinal);
+
+        // The signer's path up to the root, and a "good" embedded response for the signer and for the issuing CA.
+        Dictionary<string, string> path = ini.Where(s => s.Key.StartsWith("signature.1.path.", StringComparison.Ordinal)).Select(s => s.Value).Single(p => p["for"] == "signer");
+        Assert.Equal(PkiLayer.Root(pki).Subject.ToString(), path["certificate.3"]);
+        List<Dictionary<string, string>> ocsp = ini.Where(s => s.Key.StartsWith("signature.1.ocsp.", StringComparison.Ordinal)).Select(s => s.Value).ToList();
+        Assert.Equal(2, ocsp.Count(o => o["path"] == "signer" && o["status"] == "good" && o["source"] == "embedded"));
+        Assert.DoesNotContain(ini["signature.1.checks"].Values, c => c.StartsWith("FAIL | ", StringComparison.Ordinal));
+        Assert.Equal(signature["warnings"], ini["signature.1.checks"].Values.Count(c => c.StartsWith("WARN | ", StringComparison.Ordinal)).ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        // --report writes the same report (except the time of verification) in UTF-8 without a BOM.
+        byte[] file = File.ReadAllBytes(P("report.ini"));
+        Assert.NotEqual(0xEF, file[0]);
+        static string WithoutTime(string text) => string.Join("\n", text.ReplaceLineEndings("\n").Split('\n').Where(l => !l.StartsWith("verified_at=", StringComparison.Ordinal)));
+        Assert.Equal(WithoutTime(output), WithoutTime(System.Text.Encoding.UTF8.GetString(file)));
+    }
+
+    [Fact]
+    public void ReportFormatIsChecked()
+    {
+        string document = Document();
+        var (code, output) = Run("verify", "--in", document, "--format", "json");
+        Assert.Equal(UaSign.Error, code);
+        Assert.Contains("--format must be text or ini", output, StringComparison.Ordinal);
+    }
+
+    private static Dictionary<string, Dictionary<string, string>> ParseIni(string text)
+    {
+        var sections = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+        Dictionary<string, string>? current = null;
+        foreach (string line in text.ReplaceLineEndings("\n").Split('\n'))
+        {
+            if (line.Length == 0 || line.StartsWith(';'))
+                continue;
+            if (line.StartsWith('['))
+            {
+                sections.Add(line[1..^1], current = new Dictionary<string, string>(StringComparer.Ordinal));
+                continue;
+            }
+            int eq = line.IndexOf('=');
+            Assert.True(current is not null && eq > 0, $"Not an INI line: {line}");
+            current.Add(line[..eq], line[(eq + 1)..]);
+        }
+        return sections;
     }
 
     [Fact]

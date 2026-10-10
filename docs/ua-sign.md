@@ -95,6 +95,7 @@ the hash reversed before 5.9, D stored little-endian, exclusive canonicalization
 
 ```bash
 ua-sign verify --in SIGNATURE [--data FILE…] [--trust ROOT…] [--certs CA…] [--online] [--extract DIR] [--quiet]
+               [--format text|ini] [--report FILE]
 ```
 
 The format is recognised by the content: a ZIP is ASiC-S / ASiC-E, XML is XAdES, anything else is CAdES (DER, PEM or
@@ -116,6 +117,43 @@ Every signature is reported check by check — `[ OK ]`, `[WARN]`, `[FAIL]`:
 A signature is valid when no check failed; warnings mark what could not be established (no trusted root given, no
 revocation data). Trusted roots for qualified signatures are the ЦЗО certificates
 (`tests/UA.Cryptography.Tests/TestData/certificates/czo-roots` holds the current ones).
+
+### The INI report
+
+`--format ini` prints, instead of the checks, a report with everything the checks were made on; `--report FILE` writes
+the same report to a file in UTF-8 (use it rather than redirecting the output on Windows PowerShell 5, whose `>` writes
+UTF-16). Times are UTC in ISO 8601, digests and serial numbers are hex, algorithms are a name and the identifier the
+signature uses (an OID in CMS, a URI in XML-DSig). Sections:
+
+| Section | Keys |
+|---|---|
+| `[summary]` | `file`, `format`, `result` (`VALID` / `INVALID`), `signatures`, `warnings`, `failures`, `verified_at`, `signed_file.N` |
+| `[container]`, `[container.checks]` | ASiC only: the structure checks |
+| `[signature.N]` | `title`, `level`, `packaging`, `signature_algorithm`, `digest_algorithm`, `signing_time` (claimed), `timestamp_time`, `validation_time`, `result`, `warnings`, `failures` |
+| `[signature.N.signer]` | `subject`, `issuer`, `serial`, `valid_from`, `valid_to`, `key`, `certificate_signature_algorithm` |
+| `[signature.N.reference.M]` | what the signature covers: `name` (a XAdES reference URI, or `content` in CAdES), `digest_algorithm`, `digest` |
+| `[signature.N.timestamp.M]` | `kind`, `time`, `serial`, `policy`, `imprint_algorithm`, `imprint`, `authority`, `authority_serial` |
+| `[signature.N.path.M]` | `for` (`signer`, `signature time-stamp service`), then `certificate.K` with `.serial`, `.valid_from`, `.valid_to`, from the certificate up |
+| `[signature.N.ocsp.M]` | `path`, `certificate`, `serial`, `status`, `revocation_time`, `source` (`embedded` / `online`), `responder`, `produced_at`, `this_update`, `next_update` |
+| `[signature.N.checks]` | `K=STATUS \| check \| details`, `STATUS` being `OK`, `WARN` or `FAIL` |
+
+```ini
+[signature.1]
+level=XAdES-B-LT
+packaging=detached
+signature_algorithm=DSTU 4145 with DSTU 7564-256 (http://www.w3.org/2001/04/xmldsig-more#dstu4145-dstu7564-256)
+digest_algorithm=DSTU 7564-256 (1.2.804.2.1.1.1.1.2.2.1)
+signing_time=2026-10-10T16:17:34Z
+timestamp_time=2026-10-10T16:17:59Z
+
+[signature.1.timestamp.1]
+kind=signature time-stamp
+time=2026-10-10T16:17:59Z
+policy=1.2.804.2.1.1.1.2.3.4.1.1
+imprint_algorithm=DSTU 7564-256 (1.2.804.2.1.1.1.1.2.2.1)
+```
+
+Test: `UaSignTests.IniReportHoldsEveryDetail`.
 
 ## What is not supported
 

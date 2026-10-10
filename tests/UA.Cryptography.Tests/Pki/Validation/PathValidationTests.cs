@@ -48,6 +48,10 @@ public class PathValidationTests
         Assert.True(report.IsValid, string.Join("\n", report.Checks));
         Assert.DoesNotContain(report.Checks, c => c.Status != CheckStatus.Passed);
         Assert.Equal(2, report.Checks.Count(c => c.Name.StartsWith("path: revocation", StringComparison.Ordinal)));
+        Assert.Equal([signer, ca, root], report.Paths.Single().Certificates);
+        Assert.Equal([signer, ca], report.Revocations.Select(r => r.Certificate));
+        Assert.All(report.Revocations, r => Assert.Equal(OcspCertificateStatus.Good, r.Status.Status));
+        Assert.All(report.Revocations, r => Assert.False(r.Online));
 
         // The same path asked online instead of from embedded responses.
         var online = new PkiLayer.Ocsp(pki);

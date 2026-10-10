@@ -11,12 +11,13 @@
 #   --certs CA.cer     CA certificates that complete the chain; repeatable
 #   --online           ask OCSP responders and download missing CA certificates
 #   --extract DIR      write the signed content into DIR
+#   --report FILE      also write a detailed INI report (UTF-8); --format ini prints it instead of the checks
 #
 # Exit code: 0 valid, 1 invalid, 2 error.
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 fi
 signature="$1"; shift

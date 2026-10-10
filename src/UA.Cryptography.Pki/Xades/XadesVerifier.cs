@@ -81,6 +81,8 @@ public static class XadesVerifier
 
         // References: resolve each one first; the digests are compared once the signer's key (and its DKE) is known.
         var references = new List<(string Name, string Hash, byte[] Expected, byte[]? Content)>();
+        report.SignatureAlgorithm = signatureMethod;
+        report.DigestAlgorithm = signatureHash;
         foreach (XmlElement reference in signedInfo.SelectNodes("ds:Reference", ns)!.Cast<XmlElement>())
         {
             string uri = reference.GetAttribute("URI");
@@ -88,6 +90,7 @@ public static class XadesVerifier
             string digestHash = PkiAlgorithms.HashOfXmlAlgorithm(Single(reference, "ds:DigestMethod", ns).GetAttribute("Algorithm"));
             byte[] expected = Convert.FromBase64String(Single(reference, "ds:DigestValue", ns).InnerText.Trim());
             List<(string Algorithm, IReadOnlyCollection<string>? Prefixes)> transforms = Transforms(reference, ns);
+            report.Add(new SignedObject(uri.Length == 0 ? "(document)" : uri, digestHash, expected));
 
             byte[]? content;
             if (uri.StartsWith('#') || uri.Length == 0)
@@ -166,6 +169,7 @@ public static class XadesVerifier
             TimeStampToken token = TimeStampToken.Load(Convert.FromBase64String(Single(stamp, "xades:EncapsulatedTimeStamp", ns).InnerText.Trim()));
             int before = report.Checks.Count;
             Certificate? tsa = token.Verify(covered, pool, report, "signature time-stamp");
+            report.Add(new TimeStampDetails("signature time-stamp", token, tsa));
             if (tsa is not null)
             {
                 pool.AddRange(token.Cms.Certificates);
@@ -177,8 +181,9 @@ public static class XadesVerifier
 
         List<OcspResponse> ocsp = unsigned is null ? [] : ReadAll(unsigned, "xades:RevocationValues/xades:OCSPValues/xades:EncapsulatedOCSPValue", ns)
             .Select(b => OcspResponse.Load(b)).ToList();
-        report.Format = $"XAdES-B-{(certificateValues.Count > 0 || ocsp.Count > 0 ? "LT" : hasTimeStamp ? "T" : "B")}, "
-            + $"{(externalFiles.Count > 0 ? "detached" : "enveloped")}, {PkiAlgorithms.HashName(signatureHash)}";
+        report.Level = $"XAdES-B-{(certificateValues.Count > 0 || ocsp.Count > 0 ? "LT" : hasTimeStamp ? "T" : "B")}";
+        report.Packaging = externalFiles.Count > 0 ? "detached" : "enveloped";
+        report.Format = $"{report.Level}, {report.Packaging}, {PkiAlgorithms.HashName(signatureHash)}";
 
         CertificatePathValidator.Validate(certificate, pool, ocsp, options, report.ValidationTime, report, "signer");
     }

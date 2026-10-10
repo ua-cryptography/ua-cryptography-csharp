@@ -40,8 +40,13 @@ public static class CadesVerifier
         Certificate? certificate = cms.FindCertificate(signer, known);
         bool hasTimeStamp = signer.FindUnsigned(Oids.SignatureTimeStampToken) is not null;
         bool longTerm = certValues.Count > 0 || ocspValues.Count > 0;
-        report.Format = $"CAdES-{(longTerm ? "X Long" : hasTimeStamp ? "T" : "B")}, {(cms.Content is null ? "detached" : "enveloped")}, "
-            + PkiAlgorithms.HashName(signer.DigestAlgorithm);
+        report.Level = $"CAdES-{(longTerm ? "X Long" : hasTimeStamp ? "T" : "B")}";
+        report.Packaging = cms.Content is null ? "detached" : "enveloped";
+        report.Format = $"{report.Level}, {report.Packaging}, {PkiAlgorithms.HashName(signer.DigestAlgorithm)}";
+        report.SignatureAlgorithm = signer.SignatureAlgorithm;
+        report.DigestAlgorithm = signer.DigestAlgorithm;
+        if (signer.FindSigned(Oids.MessageDigest) is { } messageDigest)
+            report.Add(new SignedObject("content", signer.DigestAlgorithm, messageDigest.Value.GetOctetString()));
         if (certificate is null)
         {
             report.Fail("signer certificate", $"the certificate ({signer}) is not in the signature and was not given");
@@ -91,6 +96,7 @@ public static class CadesVerifier
             return null;
         }
         Certificate? tsa = token.Verify(covered, pool, report, name);
+        report.Add(new TimeStampDetails(name, token, tsa));
         if (tsa is not null)
         {
             pool.AddRange(token.Cms.Certificates);

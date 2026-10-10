@@ -86,6 +86,7 @@ public static class CertificatePathValidator
         List<Certificate> poolList = [.. pool, .. options.ExtraCertificates];
         List<Certificate> chain = BuildChain(leaf, poolList, options.TrustAnchors, options.Downloads);
         Certificate top = chain[^1];
+        report.Add(new CertificatePath(name, chain));
         report.Pass($"{name}: path", string.Join(" → ", chain.Select(c => $"'{Short(c)}'")));
 
         // Signatures, validity and CA flags along the path.
@@ -176,6 +177,7 @@ public static class CertificatePathValidator
             return;
         }
 
+        report.Add(new RevocationStatus(name, certificate, response, status, responder, source == "online"));
         string at = $"{source} response of '{Short(responder)}' at {status.ThisUpdate:yyyy-MM-dd HH:mm} UTC";
         switch (status.Status)
         {

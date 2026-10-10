@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using UA.Cryptography.Dstu4145;
 using UA.Cryptography.Pki;
 using UA.Cryptography.Pki.Asic;
@@ -99,7 +100,10 @@ internal static class UaSign
               --online                  ask OCSP responders and download missing CA certificates
               --extract DIR             write the signed content into this directory
               --quiet                   print only the summary
-            """, ["in", "data", "trust", "certs", "extract"], ["online", "quiet"], Verify),
+              --format text|ini         text (default) or an INI report with every detail: algorithms, signer,
+                                        digests, time-stamps, certificate paths, OCSP statuses and checks
+              --report FILE             also write the INI report to FILE (UTF-8)
+            """, ["in", "data", "trust", "certs", "extract", "format", "report"], ["online", "quiet"], Verify),
     };
 
     public static int Run(string[] args, TextWriter output, TextWriter error)
@@ -234,18 +238,8 @@ internal static class UaSign
         string pad = new(' ', indent.Length);
         output.WriteLine($"{indent}{c.Subject}");
         output.WriteLine($"{pad}issuer {c.Issuer}");
-        output.WriteLine($"{pad}serial {c.SerialNumber.ToString("X", System.Globalization.CultureInfo.InvariantCulture).TrimStart('0')}, "
-            + $"valid {c.NotBefore:yyyy-MM-dd} – {c.NotAfter:yyyy-MM-dd}");
-        if (c.HasDstu4145Key)
-        {
-            var key = c.PublicKey;
-            string basis = key.Domain.Field is UA.Cryptography.Math.PolynomialBasisField ? "PB" : "ONB";
-            output.WriteLine($"{pad}DSTU 4145 key, {basis} m = {key.Domain.Field.M}{(key.Dke is null ? "" : ", with DKE")}");
-        }
-        else
-        {
-            output.WriteLine($"{pad}key algorithm {c.PublicKeyAlgorithm}");
-        }
+        output.WriteLine($"{pad}serial {Report.Serial(c.SerialNumber)}, valid {c.NotBefore:yyyy-MM-dd} – {c.NotAfter:yyyy-MM-dd}");
+        output.WriteLine($"{pad}{Report.Key(c)}");
         foreach (string url in c.OcspUrls)
             output.WriteLine($"{pad}OCSP {url}");
         foreach (string url in c.TimeStampUrls)
@@ -334,6 +328,12 @@ internal static class UaSign
     private static int Verify(Arguments args, TextWriter output)
     {
         string path = args.Required("in");
+        bool ini = (args.Optional("format") ?? "text") switch
+        {
+            "text" => false,
+            "ini" => true,
+            _ => throw new UsageException("--format must be text or ini."),
+        };
         byte[] signature = File.ReadAllBytes(path);
         string directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
         Dictionary<string, byte[]> data = args.All("data").ToDictionary(p => Path.GetFileName(p), File.ReadAllBytes, StringComparer.Ordinal);
@@ -369,7 +369,17 @@ internal static class UaSign
             Downloads = online ? new HttpCertificateSource() : null,
         };
         VerificationResult result = SignatureVerifier.Verify(signature, Detached, options);
-        Report.Write(path, result, output, args.Flag("quiet"));
+        if (ini)
+            Report.WriteIni(path, result, output);
+        else
+            Report.Write(path, result, output, args.Flag("quiet"));
+        if (args.Optional("report") is { } reportPath)
+        {
+            using (var writer = new StreamWriter(reportPath, false, new UTF8Encoding(false)))
+                Report.WriteIni(path, result, writer);
+            if (!ini)
+                output.WriteLine($"Report: {reportPath}");
+        }
 
         if (args.Optional("extract") is { } extract)
         {
@@ -382,7 +392,7 @@ internal static class UaSign
                     throw new InvalidDataException($"Refusing to extract '{name}' outside {extract}.");
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 File.WriteAllBytes(target, content);
-                output.WriteLine($"Extracted: {target}");
+                output.WriteLine(ini ? $"; extracted: {target}" : $"Extracted: {target}");
             }
         }
         return result.IsValid ? Valid : Invalid;

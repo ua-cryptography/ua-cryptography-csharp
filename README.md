@@ -102,7 +102,7 @@ Requires the .NET 10 SDK (the libraries target .NET 8; the tests, the benchmark 
 
 ```bash
 dotnet build
-dotnet test                                                        # 823 tests, a few seconds
+dotnet test                                                        # 826 tests, a few seconds
 dotnet run -c Release --project bench/UA.Cryptography.Benchmarks             # benchmark
 dotnet run -c Release --project bench/UA.Cryptography.Benchmarks -- --portable # without PMULL/PCLMUL
 ```

@@ -132,4 +132,12 @@ public static class PkiAlgorithms
         Oids.Sha256 => "SHA-256",
         _ => oid,
     };
+
+    /// <summary>The name of a signature algorithm given by its OID or XML-DSig URI; unknown ones are returned as given.</summary>
+    public static string SignatureAlgorithmName(string identifier) => identifier switch
+    {
+        Oids.Dstu4145WithDstu7564 or XmlSignatureDstu7564 => "DSTU 4145 with DSTU 7564-256",
+        Oids.Dstu4145WithGost34311 or XmlSignatureGost34311 => "DSTU 4145 with GOST 34.311-95",
+        _ => identifier,
+    };
 }
