@@ -1,0 +1,56 @@
+name: Release
+
+# Publishes UA.Cryptography to nuget.org when a version tag (v1.2.3, v1.2.3-beta.1) is pushed.
+# Authentication uses nuget.org Trusted Publishing: no API key is stored in the repository.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC token exchanged for a short-lived nuget.org API key
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release -p:Version=$VERSION
+
+      - name: Test
+        run: dotnet test --no-build -c Release
+
+      - name: Pack
+        run: dotnet pack src/UA.Cryptography --no-build -c Release -p:Version=$VERSION -o artifacts
+
+      - uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # The .snupkg next to the .nupkg is pushed to the symbol server automatically.
+      - name: Push
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts
